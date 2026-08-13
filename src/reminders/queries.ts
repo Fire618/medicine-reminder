@@ -1,6 +1,6 @@
 import { db } from '../db/db';
-import type { Medicine, Reminder, ReminderStatus } from '../db/types';
-import { dateStrToDate, todayStr } from '../utils/time';
+import type { HistoryEntry, Medicine, Reminder, ReminderStatus } from '../db/types';
+import { addDaysToDateStr, dateStrToDate, todayStr } from '../utils/time';
 
 export type JoinedReminder = {
   reminder: Reminder;
@@ -70,4 +70,45 @@ export async function getMissedReminders(): Promise<JoinedReminder[]> {
     .filter((r) => r.scheduledTime >= start && r.scheduledTime <= end)
     .toArray();
   return join(reminders);
+}
+
+/** Recent medication history, newest first. */
+export async function getHistoryEntries(limit = 500): Promise<HistoryEntry[]> {
+  return db.history.orderBy('scheduledTime').reverse().limit(limit).toArray();
+}
+
+export type DayAdherence = {
+  date: string;
+  taken: number;
+  total: number;
+};
+
+/**
+ * Taken/total adherence for each of the last `days` days.
+ * 'snoozed' history entries are excluded so a dose is only counted once
+ * (its final outcome is recorded separately).
+ */
+export async function getDailyAdherence(days = 7): Promise<DayAdherence[]> {
+  const startStr = addDaysToDateStr(todayStr(), -(days - 1));
+  const start = dateStrToDate(startStr).getTime();
+  const entries = await db.history
+    .where('scheduledTime')
+    .aboveOrEqual(start)
+    .toArray();
+
+  const result: DayAdherence[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = addDaysToDateStr(startStr, i);
+    const dayStart = dateStrToDate(d).getTime();
+    const dayEnd = dayStart + DAY_MS - 1;
+    const dayEntries = entries.filter(
+      (e) => e.scheduledTime >= dayStart && e.scheduledTime <= dayEnd,
+    );
+    result.push({
+      date: d,
+      taken: dayEntries.filter((e) => e.status === 'taken').length,
+      total: dayEntries.filter((e) => e.status !== 'snoozed').length,
+    });
+  }
+  return result;
 }
