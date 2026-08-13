@@ -552,6 +552,58 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* Reference image */
+.modal--camera {
+  max-width: 460px;
+}
+
+.camera-preview {
+  width: 100%;
+  border-radius: 10px;
+  background: #000;
+  display: block;
+}
+
+.form-error-block {
+  text-align: center;
+}
+
+.ref-image {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ref-image__preview {
+  width: 100%;
+  max-width: 220px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+}
+
+.ref-image__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 4 / 3;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.ref-image__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ref-image__note {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .app-header {

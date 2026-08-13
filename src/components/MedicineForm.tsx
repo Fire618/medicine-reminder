@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Frequency, Medicine, MedicineInput } from '../db/types';
 import { WEEKDAYS_SHORT, addDaysToDateStr, todayStr } from '../utils/time';
+import ReferenceImagePicker from './ReferenceImagePicker';
 
 type EndType = 'ongoing' | 'duration' | 'date';
 
@@ -20,6 +21,7 @@ function toInput(initial?: Medicine | null): {
   endType: EndType;
   durationDays: string;
   endDate: string;
+  referenceImage: Blob | null;
 } {
   const today = todayStr();
   let endType: EndType = 'ongoing';
@@ -44,6 +46,7 @@ function toInput(initial?: Medicine | null): {
     endType,
     durationDays,
     endDate,
+    referenceImage: initial?.referenceImage ?? null,
   };
 }
 
@@ -128,7 +131,7 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
       startDate: start,
       endDate,
       durationDays,
-      referenceImage: initial?.referenceImage ?? null,
+      referenceImage: form.referenceImage,
       visualMetadata: initial?.visualMetadata ?? null,
       active: initial?.active ?? true,
     };
@@ -306,9 +309,13 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
         )}
       </fieldset>
 
-      <p className="muted form-note">
-        Reference photo capture and visual check are not available yet (planned in later phases).
-      </p>
+      <fieldset className="field">
+        <legend>Reference photo (optional)</legend>
+        <ReferenceImagePicker
+          value={form.referenceImage}
+          onChange={(blob) => set('referenceImage', blob)}
+        />
+      </fieldset>
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
