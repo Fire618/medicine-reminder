@@ -19,7 +19,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <NavLink to="/" className="app-brand" aria-label="Medicine Reminder home">
-          <img src="/icon.svg" alt="" width="28" height="28" />
+          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="28" height="28" />
           <span>Medicine Reminder</span>
         </NavLink>
         <nav className="app-nav" aria-label="Primary">

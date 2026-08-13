@@ -39,7 +39,7 @@ export function showDueAlarmNotification(
     const notification = new Notification(`Time to take ${medicineName}`, {
       body,
       tag: `medicine-reminder-${reminderId}`,
-      icon: '/icon-192.png',
+      icon: `${import.meta.env.BASE_URL}icon-192.png`,
     });
     notification.onclick = () => {
       window.focus();
