@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { scheduledDates } from './schedule';
+import {
+  DEFAULT_MEAL_WINDOWS,
+  effectiveMealWindows,
+  scheduledDates,
+  scheduledMealWindows,
+} from './schedule';
 import type { Medicine } from '../db/types';
-import { addDaysToDateStr, todayStr } from '../utils/time';
+import { addDaysToDateStr, todayStr, toDateStr } from '../utils/time';
 
 function makeMedicine(overrides: Partial<Medicine>): Medicine {
   return {
@@ -11,6 +16,8 @@ function makeMedicine(overrides: Partial<Medicine>): Medicine {
     frequency: 'daily',
     daysOfWeek: [],
     times: ['09:00'],
+    meals: [],
+    mealWindows: DEFAULT_MEAL_WINDOWS,
     startDate: todayStr(),
     endDate: null,
     durationDays: null,
@@ -68,5 +75,50 @@ describe('scheduledDates', () => {
     const future = addDaysToDateStr(todayStr(), 40);
     const dates = scheduledDates(makeMedicine({ startDate: future }));
     expect(dates).toHaveLength(0);
+  });
+});
+
+describe('before-meal frequency', () => {
+  it('treats empty daysOfWeek as every day', () => {
+    const end = addDaysToDateStr(todayStr(), 2);
+    const dates = scheduledDates(
+      makeMedicine({ frequency: 'before-meal', daysOfWeek: [], meals: ['lunch'], endDate: end }),
+    );
+    expect(dates).toHaveLength(3);
+  });
+
+  it('honors selected weekdays when present', () => {
+    const end = addDaysToDateStr(todayStr(), 6);
+    const today = new Date();
+    const dates = scheduledDates(
+      makeMedicine({
+        frequency: 'before-meal',
+        daysOfWeek: [today.getDay()],
+        meals: ['lunch'],
+        endDate: end,
+      }),
+    );
+    expect(dates).toHaveLength(1);
+  });
+
+  it('builds a lunch window on a date using the configured times', () => {
+    const medicine = makeMedicine({ frequency: 'before-meal', meals: ['lunch'] });
+    const windows = scheduledMealWindows(medicine, todayStr());
+    expect(windows).toHaveLength(1);
+    expect(windows[0].meal).toBe('lunch');
+    expect(toDateStr(windows[0].start)).toBe(todayStr());
+    expect(windows[0].start.getHours()).toBe(11);
+    expect(windows[0].end.getHours()).toBe(14);
+  });
+
+  it('returns nothing for non-meal frequencies', () => {
+    const windows = scheduledMealWindows(makeMedicine({ meals: ['dinner'] }), todayStr());
+    expect(windows).toHaveLength(0);
+  });
+
+  it('applies defaults for meals without a stored window', () => {
+    const windows = effectiveMealWindows(makeMedicine({}));
+    expect(windows.breakfast.start).toBe('07:00');
+    expect(windows.dinner.end).toBe('21:00');
   });
 });

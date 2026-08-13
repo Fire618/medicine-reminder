@@ -11,13 +11,30 @@ import type { Medicine, MedicineInput } from '../db/types';
 import Modal from '../components/Modal';
 import MedicineForm from '../components/MedicineForm';
 import { WEEKDAYS_SHORT, formatDateStr } from '../utils/time';
+import { MEAL_LABELS } from '../reminders/schedule';
 
 type Editing = { mode: 'add' } | { mode: 'edit'; medicine: Medicine } | null;
 
 function frequencyLabel(m: Medicine): string {
+  if (m.frequency === 'before-meal') {
+    const meals = (m.meals ?? []).map((meal) => MEAL_LABELS[meal]);
+    return meals.length > 0 ? `Before ${meals.join(' / ')}` : 'Before meals';
+  }
   if (m.frequency === 'daily') return 'Every day';
   if (m.daysOfWeek.length === 7) return 'Every day';
   return m.daysOfWeek.map((d) => WEEKDAYS_SHORT[d]).join(', ');
+}
+
+function scheduleMeta(m: Medicine): string {
+  if (m.frequency === 'before-meal') {
+    return (m.meals ?? [])
+      .map((meal) => {
+        const w = m.mealWindows?.[meal];
+        return w ? `${MEAL_LABELS[meal]} ${w.start}–${w.end}` : MEAL_LABELS[meal];
+      })
+      .join(', ');
+  }
+  return m.times.join(', ');
 }
 
 export default function Medicines() {
@@ -93,7 +110,7 @@ export default function Medicines() {
                 <h2 className="medicine-card__name">{m.name}</h2>
                 {m.dosage && <p className="muted">{m.dosage}</p>}
                 <p className="medicine-card__meta">
-                  {frequencyLabel(m)} &middot; {m.times.join(', ')}
+                  {frequencyLabel(m)} &middot; {scheduleMeta(m)}
                 </p>
                 <p className="muted medicine-card__meta">
                   {formatDateStr(m.startDate)}

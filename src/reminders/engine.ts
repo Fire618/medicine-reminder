@@ -1,7 +1,7 @@
 import { db } from '../db/db';
 import type { Medicine, Reminder } from '../db/types';
 import { newId } from '../utils/id';
-import { scheduledDates, scheduledTimes } from './schedule';
+import { scheduledDates, scheduledMealWindows, scheduledTimes } from './schedule';
 
 /**
  * Regenerates the materialized future reminders for a single medicine.
@@ -31,34 +31,64 @@ export async function syncRemindersForMedicine(medicine: Medicine): Promise<void
     const now = Date.now();
     const dates = scheduledDates(medicine);
     const created: Reminder[] = [];
-    for (const dateStr of dates) {
-      for (const dt of scheduledTimes(medicine, dateStr)) {
-        if (dt.getTime() < now) continue;
-        created.push({
-          id: newId(),
-          medicineId: medicine.id,
-          scheduledTime: dt.getTime(),
-          status: 'pending',
-          triggeredAt: null,
-          completedAt: null,
-          action: null,
-          verificationResult: null,
-        });
+
+    if (medicine.frequency === 'before-meal') {
+      for (const dateStr of dates) {
+        for (const { meal, start, end } of scheduledMealWindows(medicine, dateStr)) {
+          if (end.getTime() < now) continue;
+          created.push({
+            id: newId(),
+            medicineId: medicine.id,
+            scheduledTime: start.getTime(),
+            status: 'pending',
+            triggeredAt: null,
+            completedAt: null,
+            action: null,
+            verificationResult: null,
+            gentle: true,
+            windowEnd: end.getTime(),
+            meal,
+          });
+        }
+      }
+    } else {
+      for (const dateStr of dates) {
+        for (const dt of scheduledTimes(medicine, dateStr)) {
+          if (dt.getTime() < now) continue;
+          created.push({
+            id: newId(),
+            medicineId: medicine.id,
+            scheduledTime: dt.getTime(),
+            status: 'pending',
+            triggeredAt: null,
+            completedAt: null,
+            action: null,
+            verificationResult: null,
+            gentle: false,
+            windowEnd: null,
+            meal: null,
+          });
+        }
       }
     }
+
     if (created.length > 0) {
       await db.reminders.bulkAdd(created);
     }
   });
 }
 
-/** Marks overdue pending reminders as 'missed'. Returns how many were updated. */
+/**
+ * Marks overdue reminders as 'missed' and returns how many were updated.
+ * Gentle reminders are missed when their window has closed; others when the
+ * scheduled time has passed.
+ */
 export async function markMissedReminders(): Promise<number> {
   const now = Date.now();
   const overdue = await db.reminders
     .where('status')
     .equals('pending')
-    .filter((r) => r.scheduledTime < now)
+    .filter((r) => (r.gentle ? (r.windowEnd ?? r.scheduledTime) < now : r.scheduledTime < now))
     .toArray();
   if (overdue.length === 0) return 0;
   await db.reminders.bulkUpdate(

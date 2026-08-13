@@ -8,6 +8,8 @@ import {
 } from '../reminders/queries';
 import { formatTime, formatDateStr, WEEKDAYS_SHORT } from '../utils/time';
 import { STATUS_LABELS } from '../utils/status';
+import { markTaken } from '../reminders/actions';
+import { MEAL_LABELS } from '../reminders/schedule';
 import type { JoinedReminder } from '../reminders/queries';
 
 function reminderTime(ts: number): string {
@@ -22,6 +24,15 @@ function statusClass(status: string): string {
   if (status === 'missed') return 'badge badge--danger';
   if (status === 'taken') return 'badge badge--ok';
   return 'badge';
+}
+
+function gentleTag(jr: JoinedReminder): string | null {
+  if (!jr.reminder.gentle) return null;
+  const meal = jr.reminder.meal ? MEAL_LABELS[jr.reminder.meal] : 'meal';
+  if (jr.reminder.windowEnd && jr.reminder.windowEnd > Date.now()) {
+    return `Before ${meal.toLowerCase()} · open until ${reminderTime(jr.reminder.windowEnd)}`;
+  }
+  return `Before ${meal.toLowerCase()}`;
 }
 
 export default function Dashboard() {
@@ -129,18 +140,32 @@ export default function Dashboard() {
               <p className="muted">No medicines scheduled for today.</p>
             ) : (
               <ul className="plain-list">
-                {today.map((jr) => (
-                  <li key={jr.reminder.id} className="reminder-row">
-                    <span>
-                      {jr.medicine.name}
-                      {jr.medicine.dosage ? (
-                        <span className="muted"> · {jr.medicine.dosage}</span>
-                      ) : null}
-                    </span>
-                    <span className="muted">{reminderTime(jr.reminder.scheduledTime)}</span>
-                    <span className={statusClass(jr.reminder.status)}>{statusLabel(jr)}</span>
-                  </li>
-                ))}
+                {today.map((jr) => {
+                  const tag = gentleTag(jr);
+                  const pending = jr.reminder.status === 'pending';
+                  return (
+                    <li key={jr.reminder.id} className="reminder-row">
+                      <span>
+                        {jr.medicine.name}
+                        {jr.medicine.dosage ? (
+                          <span className="muted"> · {jr.medicine.dosage}</span>
+                        ) : null}
+                        {tag ? <span className="muted"> · {tag}</span> : null}
+                      </span>
+                      <span className="muted">{reminderTime(jr.reminder.scheduledTime)}</span>
+                      <span className={statusClass(jr.reminder.status)}>{statusLabel(jr)}</span>
+                      {pending && (
+                        <button
+                          type="button"
+                          className="btn btn--compact"
+                          onClick={() => markTaken(jr.reminder.id, 'none')}
+                        >
+                          Mark taken
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

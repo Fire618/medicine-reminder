@@ -1,7 +1,12 @@
 import { useEffect } from 'react';
 import { getActiveAlarm, setActiveAlarm, type ActiveAlarm } from './alarmStore';
 import { startAlarmSound, stopAlarmSound, unlockAudio } from './sound';
-import { isNotificationSupported, requestNotificationPermission, showDueAlarmNotification } from './notifications';
+import {
+  isNotificationSupported,
+  requestNotificationPermission,
+  showDueAlarmNotification,
+  showGentleReminderNotification,
+} from './notifications';
 import { db } from '../db/db';
 
 const TICK_MS = 10_000;
@@ -9,6 +14,8 @@ const TICK_MS = 10_000;
 /**
  * Checks whether any reminder is due and, if so, starts the persistent alarm.
  * Safe to call repeatedly; it is a no-op while an alarm is already active.
+ * Gentle (meal-window) reminders only send one notification and never start
+ * the loud alarm, so they are skipped entirely once their nudge was sent.
  */
 export async function checkDueAlarm(): Promise<void> {
   if (getActiveAlarm()) return;
@@ -21,6 +28,23 @@ export async function checkDueAlarm(): Promise<void> {
   if (due.length === 0) return;
 
   const reminder = due[0];
+
+  if (reminder.gentle) {
+    if (reminder.triggeredAt === null) {
+      const medicine = await db.medicines.get(reminder.medicineId);
+      if (!medicine) return;
+      await db.reminders.update(reminder.id, { triggeredAt: now });
+      showGentleReminderNotification(
+        reminder.id,
+        medicine.name,
+        medicine.dosage,
+        reminder.meal,
+        reminder.scheduledTime,
+      );
+    }
+    return;
+  }
+
   const medicine = await db.medicines.get(reminder.medicineId);
   if (!medicine) return;
 

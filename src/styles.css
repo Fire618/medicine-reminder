@@ -161,6 +161,12 @@ h1 {
   color: var(--color-danger);
 }
 
+.btn--compact {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -342,6 +348,16 @@ h1 {
 .day-chip input:focus-visible + span {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+.meal-window-field {
+  margin-top: 0.75rem;
+}
+
+.meal-window-label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
 }
 
 .time-list {

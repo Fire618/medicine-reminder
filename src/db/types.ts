@@ -1,4 +1,11 @@
-export type Frequency = 'daily' | 'custom-days';
+export type Frequency = 'daily' | 'custom-days' | 'before-meal';
+
+export type Meal = 'breakfast' | 'lunch' | 'dinner';
+
+/** Configurable "HH:mm" open/close of a meal window. */
+export type MealWindow = { start: string; end: string };
+
+export type MealWindows = Record<Meal, MealWindow>;
 
 export type VisualMetadata = {
   /** Average RGB color of the medicine (foreground). */
@@ -24,6 +31,10 @@ export type Medicine = {
   daysOfWeek: number[];
   /** Reminder times as 24h "HH:mm". */
   times: string[];
+  /** Meals this medicine is taken before. Used when frequency is 'before-meal'. */
+  meals: Meal[];
+  /** Per-meal reminder windows ("HH:mm"). Used when frequency is 'before-meal'. */
+  mealWindows: MealWindows;
   /** Local date "YYYY-MM-DD". */
   startDate: string;
   /** Inclusive end date "YYYY-MM-DD", or null when ongoing. */
@@ -51,13 +62,19 @@ export type VerificationStatus = 'none' | 'match' | 'no-match';
 export type Reminder = {
   id: string;
   medicineId: string;
-  /** Epoch ms of the scheduled moment. */
+  /** Epoch ms of the scheduled moment. For gentle reminders, the window open. */
   scheduledTime: number;
   status: ReminderStatus;
   triggeredAt: number | null;
   completedAt: number | null;
   action: string | null;
   verificationResult: VerificationStatus | null;
+  /** True for meal-window reminders: one nudge, never a loud alarm. */
+  gentle: boolean;
+  /** Epoch ms when a gentle reminder's meal window closes. Null otherwise. */
+  windowEnd: number | null;
+  /** The meal a gentle reminder belongs to, for display. Null otherwise. */
+  meal: Meal | null;
 };
 
 export type HistoryEntry = {

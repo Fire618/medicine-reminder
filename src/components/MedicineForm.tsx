@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import type { Frequency, Medicine, MedicineInput } from '../db/types';
+import type { Frequency, Meal, MealWindows, Medicine, MedicineInput } from '../db/types';
 import { WEEKDAYS_SHORT, addDaysToDateStr, todayStr } from '../utils/time';
+import { DEFAULT_MEAL_WINDOWS, MEAL_LABELS, MEAL_ORDER } from '../reminders/schedule';
 import ReferenceImagePicker from './ReferenceImagePicker';
 import { analyzeImageBlob } from '../vision/analyze';
 
@@ -18,6 +19,8 @@ function toInput(initial?: Medicine | null): {
   frequency: Frequency;
   daysOfWeek: number[];
   times: string[];
+  meals: Meal[];
+  mealWindows: MealWindows;
   startDate: string;
   endType: EndType;
   durationDays: string;
@@ -43,6 +46,8 @@ function toInput(initial?: Medicine | null): {
     frequency: initial?.frequency ?? 'daily',
     daysOfWeek: initial?.daysOfWeek ?? [],
     times: initial && initial.times.length > 0 ? [...initial.times] : ['09:00'],
+    meals: initial?.meals ?? [],
+    mealWindows: initial?.mealWindows ?? JSON.parse(JSON.stringify(DEFAULT_MEAL_WINDOWS)),
     startDate: initial?.startDate ?? today,
     endType,
     durationDays,
@@ -78,20 +83,50 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
     if (form.times.length > 1) set('times', form.times.filter((_, i) => i !== idx));
   };
 
+  const toggleMeal = (meal: Meal) => {
+    const has = form.meals.includes(meal);
+    set('meals', has ? form.meals.filter((m) => m !== meal) : [...form.meals, meal]);
+  };
+
+  const setWindow = (meal: Meal, key: 'start' | 'end', value: string) => {
+    set('mealWindows', {
+      ...form.mealWindows,
+      [meal]: { ...form.mealWindows[meal], [key]: value },
+    });
+  };
+
   const buildInput = (): MedicineInput | null => {
     const name = form.name.trim();
     if (!name) {
       setError('Please enter a medicine name.');
       return null;
     }
-    const times = form.times.filter((t) => t.length > 0);
-    if (times.length === 0) {
-      setError('Please set at least one reminder time.');
-      return null;
-    }
-    if (form.frequency === 'custom-days' && form.daysOfWeek.length === 0) {
-      setError('Please choose at least one day of the week.');
-      return null;
+    if (form.frequency === 'before-meal') {
+      if (form.meals.length === 0) {
+        setError('Choose at least one meal to take this medicine before.');
+        return null;
+      }
+      for (const meal of form.meals) {
+        const w = form.mealWindows[meal];
+        if (!w?.start || !w?.end) {
+          setError(`Please set a reminder window for ${MEAL_LABELS[meal]}.`);
+          return null;
+        }
+        if (w.end <= w.start) {
+          setError(`${MEAL_LABELS[meal]} window end must be after its start.`);
+          return null;
+        }
+      }
+    } else {
+      const times = form.times.filter((t) => t.length > 0);
+      if (times.length === 0) {
+        setError('Please set at least one reminder time.');
+        return null;
+      }
+      if (form.frequency === 'custom-days' && form.daysOfWeek.length === 0) {
+        setError('Please choose at least one day of the week.');
+        return null;
+      }
     }
     const start = form.startDate;
     if (!start) {
@@ -123,12 +158,18 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
     }
 
     setError(null);
+    const isBeforeMeal = form.frequency === 'before-meal';
     return {
       name,
       dosage: form.dosage.trim(),
       frequency: form.frequency,
-      daysOfWeek: form.frequency === 'daily' ? [] : form.daysOfWeek,
-      times,
+      daysOfWeek:
+        form.frequency === 'daily' || isBeforeMeal ? [] : form.daysOfWeek,
+      times: isBeforeMeal ? [] : form.times.filter((t) => t.length > 0),
+      meals: isBeforeMeal ? [...form.meals] : [],
+      mealWindows: isBeforeMeal
+        ? form.mealWindows
+        : JSON.parse(JSON.stringify(DEFAULT_MEAL_WINDOWS)),
       startDate: start,
       endDate,
       durationDays,
@@ -213,14 +254,71 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
             />
             Specific days
           </label>
+          <label>
+            <input
+              type="radio"
+              name="mf-frequency"
+              checked={form.frequency === 'before-meal'}
+              onChange={() => set('frequency', 'before-meal')}
+            />
+            Before meals
+          </label>
         </div>
         {form.frequency === 'custom-days' && (
           <div className="day-chips" role="group" aria-label="Days of the week">
             {days}
           </div>
         )}
+        {form.frequency === 'before-meal' && (
+          <>
+            <p className="muted">
+              No fixed time — one gentle nudge when the meal window opens. Mark
+              it taken whenever you actually take it before that meal.
+            </p>
+            <div className="day-chips" role="group" aria-label="Meals">
+              {MEAL_ORDER.map((meal) => (
+                <label key={meal} className="day-chip">
+                  <input
+                    type="checkbox"
+                    checked={form.meals.includes(meal)}
+                    onChange={() => toggleMeal(meal)}
+                  />
+                  <span>{MEAL_LABELS[meal]}</span>
+                </label>
+              ))}
+            </div>
+            {form.meals.map((meal) => (
+              <div key={meal} className="field meal-window-field">
+                <span className="meal-window-label">
+                  {MEAL_LABELS[meal]} window
+                </span>
+                <div className="time-row">
+                  <label>
+                    <span className="muted">Opens</span>
+                    <input
+                      type="time"
+                      value={form.mealWindows[meal].start}
+                      aria-label={`${MEAL_LABELS[meal]} window opens`}
+                      onChange={(e) => setWindow(meal, 'start', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span className="muted">Closes</span>
+                    <input
+                      type="time"
+                      value={form.mealWindows[meal].end}
+                      aria-label={`${MEAL_LABELS[meal]} window closes`}
+                      onChange={(e) => setWindow(meal, 'end', e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </fieldset>
 
+      {form.frequency !== 'before-meal' && (
       <fieldset className="field">
         <legend>Reminder times</legend>
         <div className="time-list">
@@ -248,6 +346,7 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
           + Add another time
         </button>
       </fieldset>
+      )}
 
       <div className="field">
         <label htmlFor="mf-start">Start date *</label>
