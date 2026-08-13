@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Medicines from './pages/Medicines';
 import History from './pages/History';
 import Privacy from './pages/Privacy';
+import DevVision from './pages/DevVision';
 import './styles.css';
 
 const router = createBrowserRouter([
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { path: 'medicines', element: <Medicines /> },
       { path: 'history', element: <History /> },
       { path: 'privacy', element: <Privacy /> },
+      { path: 'dev/vision', element: <DevVision /> },
       { path: '*', element: <Dashboard /> },
     ],
   },

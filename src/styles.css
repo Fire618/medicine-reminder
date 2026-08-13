@@ -604,6 +604,47 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* Dev vision test */
+.dev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dev-img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  margin: 0.5rem 0;
+}
+
+.dev-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
+.card--ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.dev-score {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+}
+
+.dev-match {
+  margin: 0 0 0.75rem;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .dev-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .app-header {

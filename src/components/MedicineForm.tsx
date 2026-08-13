@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { Frequency, Medicine, MedicineInput } from '../db/types';
 import { WEEKDAYS_SHORT, addDaysToDateStr, todayStr } from '../utils/time';
 import ReferenceImagePicker from './ReferenceImagePicker';
+import { analyzeImageBlob } from '../vision/analyze';
 
 type EndType = 'ongoing' | 'duration' | 'date';
 
@@ -143,6 +144,11 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
     if (!input) return;
     setSaving(true);
     try {
+      if (input.referenceImage) {
+        input.visualMetadata = await analyzeImageBlob(input.referenceImage).catch(() => null);
+      } else {
+        input.visualMetadata = null;
+      }
       await onSubmit(input);
     } finally {
       setSaving(false);

@@ -1,9 +1,17 @@
 export type Frequency = 'daily' | 'custom-days';
 
 export type VisualMetadata = {
+  /** Average RGB color of the medicine (foreground). */
   dominantColor: [number, number, number];
+  /** Normalized 4x4x4 RGB histogram of the foreground (64 buckets). */
+  colorHistogram: number[];
+  /** Foreground area / total image area (0..1). */
   sizeRatio: number;
+  /** Width / height of the foreground bounding box. */
   aspectRatio: number;
+  /** 8x8 silhouette grid, each cell 0..1 foreground fraction (64 values). */
+  grid: number[];
+  /** 64-bit dHash as 16 hex characters. */
   hash: string;
 };
 
