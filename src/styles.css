@@ -809,6 +809,16 @@ h1 {
   }
 }
 
+.privacy-row {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.privacy-row:last-child {
+  border-bottom: none;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .app-header {

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { getActiveAlarm, setActiveAlarm, type ActiveAlarm } from './alarmStore';
 import { startAlarmSound, stopAlarmSound, unlockAudio } from './sound';
+import { isNotificationSupported, requestNotificationPermission, showDueAlarmNotification } from './notifications';
 import { db } from '../db/db';
 
 const TICK_MS = 10_000;
@@ -36,15 +37,22 @@ export async function checkDueAlarm(): Promise<void> {
     scheduledTime: reminder.scheduledTime,
   };
   setActiveAlarm(alarm);
+  showDueAlarmNotification(alarm.reminderId, alarm.medicineName, alarm.dosage, alarm.scheduledTime);
 }
 
 /**
- * Runs due-detection for the lifetime of the app and unlocks audio on the
- * first user gesture (browser autoplay policy).
+ * Runs due-detection for the lifetime of the app, unlocks audio, and offers
+ * notification permission on the first user gesture (browser autoplay and
+ * permission-prompt policies require a gesture).
  */
 export function useAlarmController(): void {
   useEffect(() => {
-    const unlockOnce = () => unlockAudio();
+    const unlockOnce = () => {
+      unlockAudio();
+      if (isNotificationSupported() && Notification.permission === 'default') {
+        void requestNotificationPermission();
+      }
+    };
     window.addEventListener('pointerdown', unlockOnce, { once: true });
     window.addEventListener('keydown', unlockOnce, { once: true });
 

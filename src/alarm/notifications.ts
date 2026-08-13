@@ -1,0 +1,51 @@
+import { formatTime } from '../utils/time';
+
+export type NotificationPermissionState = NotificationPermission | 'unsupported';
+
+export function isNotificationSupported(): boolean {
+  return typeof window !== 'undefined' && 'Notification' in window;
+}
+
+export function getNotificationPermission(): NotificationPermissionState {
+  if (!isNotificationSupported()) return 'unsupported';
+  return Notification.permission;
+}
+
+/** Must be called within a user gesture for the browser to show the prompt. */
+export async function requestNotificationPermission(): Promise<NotificationPermissionState> {
+  if (!isNotificationSupported()) return 'unsupported';
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return Notification.permission;
+  }
+}
+
+/**
+ * Shows a browser notification for a due alarm. No-op unless permission is
+ * granted. Works while the app is open; it cannot wake a closed app (that
+ * would require Web Push, which is intentionally not used here).
+ */
+export function showDueAlarmNotification(
+  reminderId: string,
+  medicineName: string,
+  dosage: string,
+  scheduledTime: number,
+): void {
+  if (!isNotificationSupported() || Notification.permission !== 'granted') return;
+  const time = formatTime(new Date(scheduledTime));
+  const body = dosage ? `${dosage} · scheduled ${time}` : `Scheduled ${time}`;
+  try {
+    const notification = new Notification(`Time to take ${medicineName}`, {
+      body,
+      tag: `medicine-reminder-${reminderId}`,
+      icon: '/icon-192.png',
+    });
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  } catch (err) {
+    console.error('Failed to show notification', err);
+  }
+}
