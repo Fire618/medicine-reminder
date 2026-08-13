@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import AlarmBanner from './components/AlarmBanner';
+import { useReminderEngine } from './hooks/useReminderEngine';
 
 const navItems = [
   { to: '/', label: 'Today', end: true },
@@ -9,6 +10,8 @@ const navItems = [
 ];
 
 export default function App() {
+  useReminderEngine();
+
   return (
     <div className="app">
       <header className="app-header">

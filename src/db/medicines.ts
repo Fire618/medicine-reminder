@@ -1,6 +1,7 @@
 import { db } from './db';
 import type { Medicine, MedicineInput } from './types';
 import { newId } from '../utils/id';
+import { syncRemindersForMedicine } from '../reminders/engine';
 
 export async function listMedicines(): Promise<Medicine[]> {
   return db.medicines.orderBy('updatedAt').reverse().toArray();
@@ -13,7 +14,9 @@ export async function getMedicine(id: string): Promise<Medicine | undefined> {
 export async function createMedicine(input: MedicineInput): Promise<string> {
   const id = newId();
   const now = Date.now();
-  await db.medicines.add({ ...input, id, createdAt: now, updatedAt: now });
+  const medicine: Medicine = { ...input, id, createdAt: now, updatedAt: now };
+  await db.medicines.add(medicine);
+  await syncRemindersForMedicine(medicine);
   return id;
 }
 
@@ -22,6 +25,8 @@ export async function updateMedicine(
   input: Partial<MedicineInput>,
 ): Promise<void> {
   await db.medicines.update(id, { ...input, updatedAt: Date.now() });
+  const medicine = await db.medicines.get(id);
+  if (medicine) await syncRemindersForMedicine(medicine);
 }
 
 /**
@@ -39,4 +44,6 @@ export async function deleteMedicine(id: string): Promise<void> {
 
 export async function setMedicineActive(id: string, active: boolean): Promise<void> {
   await db.medicines.update(id, { active, updatedAt: Date.now() });
+  const medicine = await db.medicines.get(id);
+  if (medicine) await syncRemindersForMedicine(medicine);
 }

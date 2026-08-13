@@ -395,6 +395,83 @@ h1 {
   }
 }
 
+/* Dashboard cards */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  margin: 0 0 1rem;
+}
+
+.card--danger {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.card-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.next-dose {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  border-left: 4px solid var(--color-primary);
+}
+
+.next-dose__value {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reminder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.reminder-row:last-child {
+  border-bottom: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  white-space: nowrap;
+}
+
+.badge--danger {
+  background: #fee2e2;
+  color: var(--color-danger);
+}
+
+.badge--ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .app-header {
