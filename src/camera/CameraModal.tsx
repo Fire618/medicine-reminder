@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { cameraError, canvasToThumbnailBlob } from './utils';
+import { useCameraStream } from './useCameraStream';
 
 type CameraModalProps = {
   title: string;
@@ -8,59 +7,10 @@ type CameraModalProps = {
 };
 
 export default function CameraModal({ title, onCapture, onClose }: CameraModalProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(true);
+  const { videoRef, error, starting, capture } = useCameraStream();
 
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new DOMException('Camera API unavailable', 'NotSupportedError');
-        }
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play().catch(() => {
-            /* keep silent; capture still works once loaded */
-          });
-        }
-      } catch (e) {
-        if (!cancelled) setError(cameraError(e));
-      } finally {
-        if (!cancelled) setStarting(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  const capture = async () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    if (!video.videoWidth || !video.videoHeight) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const blob = await canvasToThumbnailBlob(canvas);
+  const handleCapture = async () => {
+    const blob = await capture();
     if (blob) onCapture(blob);
   };
 
@@ -98,12 +48,11 @@ export default function CameraModal({ title, onCapture, onClose }: CameraModalPr
                 muted
                 aria-label="Live camera preview"
               />
-              <canvas ref={canvasRef} hidden aria-hidden="true" />
               <div className="form-actions">
                 <button type="button" className="btn" onClick={onClose}>
                   Cancel
                 </button>
-                <button type="button" className="btn btn--primary" onClick={capture}>
+                <button type="button" className="btn btn--primary" onClick={handleCapture}>
                   Capture photo
                 </button>
               </div>
