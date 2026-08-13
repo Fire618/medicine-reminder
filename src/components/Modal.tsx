@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 type ModalProps = {
   title: string;
@@ -8,6 +9,9 @@ type ModalProps = {
 
 export default function Modal({ title, onClose, children }: ModalProps) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, true);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -30,6 +34,7 @@ export default function Modal({ title, onClose, children }: ModalProps) {
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="modal"
         role="dialog"
         aria-modal="true"

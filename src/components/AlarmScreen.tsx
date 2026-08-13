@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { setActiveAlarm, useAlarm } from '../alarm/alarmStore';
 import { stopAlarmSound } from '../alarm/sound';
 import { checkDueAlarm } from '../alarm/useAlarmController';
+import { focusFirst, useFocusTrap } from '../hooks/useFocusTrap';
 import {
   SNOOZE_MINUTES,
   dismissReminder,
@@ -20,10 +21,13 @@ type Flow = 'intro' | 'camera' | 'checking' | 'result';
 
 export default function AlarmScreen() {
   const alarm = useAlarm();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [confirming, setConfirming] = useState(false);
   const [flow, setFlow] = useState<Flow>('intro');
   const [comparison, setComparison] = useState<VisualComparison | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+
+  useFocusTrap(cardRef, Boolean(alarm));
 
   const medicine = useLiveQuery(
     () => (alarm ? db.medicines.get(alarm.medicineId) : undefined),
@@ -37,6 +41,10 @@ export default function AlarmScreen() {
     setComparison(null);
     setCaptureError(null);
   }, [alarm?.reminderId]);
+
+  useEffect(() => {
+    if (alarm) focusFirst(cardRef.current);
+  }, [alarm?.reminderId, flow]);
 
   if (!alarm) return null;
 
@@ -80,7 +88,7 @@ export default function AlarmScreen() {
       aria-modal="true"
       aria-labelledby="alarm-title"
     >
-      <div className="alarm-card">
+      <div ref={cardRef} className="alarm-card">
         <p className="alarm-eyebrow">Reminder due</p>
         <h2 id="alarm-title">Time to take your medicine</h2>
         <p className="alarm-medicine">{alarm.medicineName}</p>
