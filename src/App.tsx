@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import AlarmBanner from './components/AlarmBanner';
+import AlarmScreen from './components/AlarmScreen';
 import { useReminderEngine } from './hooks/useReminderEngine';
+import { useAlarmController } from './alarm/useAlarmController';
 
 const navItems = [
   { to: '/', label: 'Today', end: true },
@@ -11,6 +13,7 @@ const navItems = [
 
 export default function App() {
   useReminderEngine();
+  useAlarmController();
 
   return (
     <div className="app">
@@ -38,6 +41,8 @@ export default function App() {
       <main className="app-main" id="main">
         <Outlet />
       </main>
+
+      <AlarmScreen />
     </div>
   );
 }
