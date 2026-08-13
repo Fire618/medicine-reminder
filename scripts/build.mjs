@@ -13,10 +13,17 @@ if (nodeMajor < 20) {
   env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --experimental-global-webcrypto`.trim();
 }
 
-const bin = (name) => resolve(root, 'node_modules', '.bin', name);
+const isWin = process.platform === 'win32';
+const bin = (name) =>
+  resolve(root, 'node_modules', '.bin', isWin ? `${name}.cmd` : name);
 
 function run(cmd, args) {
-  const result = spawnSync(cmd, args, { cwd: root, env, stdio: 'inherit' });
+  const result = spawnSync(cmd, args, {
+    cwd: root,
+    env,
+    stdio: 'inherit',
+    shell: isWin,
+  });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
