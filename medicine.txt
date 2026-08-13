@@ -1,0 +1,279 @@
+I want you to build a complete Medicine Reminder application in this project.
+
+IMPORTANT WORKING RULES:
+1. This project is located at /workspace. Work ONLY inside /workspace.
+2. Do not access, read, modify, or create files outside /workspace.
+3. Do not use or access credentials, SSH keys, environment files, browser data, or personal files outside this project.
+4. Do not add external services, APIs, databases, authentication providers, analytics, or paid services without asking me first.
+5. Do not use destructive commands such as rm -rf on the project.
+6. Use Git frequently and keep the project in a working state.
+7. Before making major architectural decisions, explain the decision briefly.
+8. If something is ambiguous, ask me rather than assuming.
+9. Do not use --auto or autonomous execution.
+10. Prefer simple, maintainable architecture over unnecessary complexity.
+11. Do not make medical recommendations, diagnose conditions, or recommend medication/dosage changes.
+
+PRODUCT:
+
+Build a modern Medicine Reminder application that allows a user to:
+
+CORE MEDICATION MANAGEMENT:
+- Add medicines
+- Edit medicines
+- Delete medicines
+- Set medicine name
+- Set dosage information entered by the user
+- Set frequency
+- Set specific reminder times
+- Set start date
+- Set end date or duration
+- Configure multiple reminder times per day
+- Mark a medicine as taken
+- Mark a medicine as skipped
+- View today's medicines
+- View upcoming reminders
+- View missed medicines
+- View medication history
+- See the next scheduled dose
+- Persist medication data locally
+- Work well on desktop and mobile-sized screens
+- Have a clean, modern, accessible UI
+
+CAMERA-BASED MEDICINE CONFIRMATION:
+
+I want the user to be able to take a LIVE picture of the medicine when a reminder fires.
+
+The intended workflow is:
+
+1. A scheduled medicine reminder becomes due.
+2. The application starts a persistent reminder/alarm.
+3. The alarm should continue until the user completes the reminder confirmation flow.
+4. The user opens the camera from the reminder screen.
+5. The user takes a live photograph of the medicine.
+6. The application performs a LOCAL visual consistency check against the medicine's previously configured/reference image.
+7. The visual check should consider characteristics such as:
+   - approximate color
+   - approximate size
+   - shape/form where technically feasible
+8. If the visual characteristics are sufficiently consistent:
+   - show "Visual match detected"
+   - ask the user to explicitly confirm that they have taken the medicine
+   - only after the user's confirmation should the reminder be marked as completed and the alarm stop.
+9. If the visual check does not match sufficiently:
+   - do NOT mark the medicine as taken
+   - keep the reminder active
+   - tell the user that the image could not be visually matched
+   - allow the user to retake the photo.
+10. The application must never claim that the camera has medically identified or authenticated a medicine.
+11. Clearly communicate that visual matching is only a convenience/consistency check and cannot guarantee medicine identity or safety.
+12. Never recommend that the user take a medicine based on the visual model.
+13. Never infer dosage from the photograph.
+14. Never infer whether a medicine is safe for the user.
+15. Never infer medical information from the image.
+
+REFERENCE MEDICINE IMAGE:
+
+When adding a medicine, allow the user to optionally capture or select a reference photograph.
+
+The reference should be associated with that medicine.
+
+When the reminder later fires, compare the newly captured image against the stored reference image.
+
+The comparison should be designed as a visual similarity check rather than medicine identification.
+
+IMPORTANT PRIVACY REQUIREMENT:
+
+Prefer LOCAL image processing.
+
+Do not upload medicine photographs to a cloud AI service unless I explicitly approve that architecture first.
+
+The application should explain where medicine images are stored.
+
+REMINDER BEHAVIOR:
+
+The reminder should have a persistent alarm state.
+
+Example:
+
+Reminder due
+    ↓
+Persistent alarm
+    ↓
+"Take your medicine"
+    ↓
+Open camera
+    ↓
+Capture live image
+    ↓
+Visual consistency check
+    ↓
+If insufficient match
+    → Alarm continues
+    → Retake photo
+    ↓
+If sufficient visual match
+    ↓
+User explicitly confirms "I took this medicine"
+    ↓
+Mark as Taken
+    ↓
+Stop alarm
+
+Also provide an emergency/manual option such as:
+- "Skip"
+- "Snooze"
+- "Dismiss"
+
+However, make it clear that these actions have different meanings from "Taken".
+
+Do not make assumptions about what medical action the user should take.
+
+NOTIFICATION REQUIREMENTS:
+
+Investigate what is technically possible for:
+- Browser notifications
+- Mobile notifications
+- Persistent alarms
+- Notifications when the browser/app is not actively open
+- Notification permissions
+- Background execution
+- Camera access
+- Offline behavior
+
+Clearly explain limitations before implementation.
+
+DATA:
+
+Design a data model covering at minimum:
+
+Medicine:
+- id
+- name
+- dosage entered by user
+- frequency
+- reminder times
+- start date
+- end date/duration
+- reference image
+- visual characteristics/metadata if needed
+- active/inactive state
+- createdAt
+- updatedAt
+
+Reminder:
+- id
+- medicineId
+- scheduledTime
+- status
+- triggeredAt
+- completedAt
+- action
+- image verification result if applicable
+
+Medication history:
+- medicineId
+- scheduled time
+- actual completion time
+- status
+- verification status
+- skipped/snoozed/taken state
+
+Do not store unnecessary personal information.
+
+IMAGE PROCESSING:
+
+During the planning phase, compare possible approaches for visual matching.
+
+Prefer a simple LOCAL solution first.
+
+Consider whether traditional computer-vision techniques are sufficient for:
+- dominant color
+- approximate dimensions
+- shape
+- basic visual similarity
+
+Only introduce an ML/computer-vision model if there is a clear technical reason.
+
+Do not introduce a cloud vision API.
+
+Do not introduce a large AI model unless I explicitly approve it.
+
+TECHNOLOGY:
+
+FIRST PHASE — DO NOT START CODING.
+
+Before creating application files:
+
+1. Inspect the current /workspace directory.
+2. Determine what development environment is available.
+3. Propose the best technology stack for this application.
+4. Explain why you selected the framework.
+5. Propose the application architecture.
+6. Define the data model.
+7. Define the reminder/alarm architecture.
+8. Define the camera/image-processing architecture.
+9. Explain how the visual comparison will work.
+10. Explain how images will be stored locally.
+11. Explain browser/mobile camera limitations.
+12. Explain browser notification limitations.
+13. Explain how persistent alarms will work.
+14. Explain offline behavior.
+15. Explain how the application could eventually become a PWA/mobile application if appropriate.
+16. Explain deployment options.
+17. Explain privacy implications.
+18. Identify important failure cases.
+19. Identify safety limitations of the visual medicine check.
+20. Provide a phased implementation plan.
+
+PHASED IMPLEMENTATION:
+
+Phase 1:
+Project foundation and UI architecture.
+
+Phase 2:
+Medicine CRUD and local persistence.
+
+Phase 3:
+Reminder scheduling.
+
+Phase 4:
+Alarm/reminder UI.
+
+Phase 5:
+Reference medicine image capture.
+
+Phase 6:
+Local visual similarity checking.
+
+Phase 7:
+Live camera confirmation flow.
+
+Phase 8:
+Medication history and dashboard.
+
+Phase 9:
+Notifications/PWA capabilities.
+
+Phase 10:
+Testing, accessibility, responsive design, and production build.
+
+FIRST RESPONSE:
+
+Do NOT create application files yet.
+
+Do NOT install packages unless absolutely necessary to inspect the environment.
+
+Do NOT implement anything.
+
+Only:
+- inspect /workspace
+- propose the technology stack
+- explain architecture
+- explain the camera verification approach
+- explain reminder/alarm behavior
+- explain data model
+- explain notification limitations
+- explain deployment
+- provide the phased plan
+
+Then STOP and wait for my approval.
