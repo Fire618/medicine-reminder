@@ -10,6 +10,7 @@ import { formatTime, formatDateStr, WEEKDAYS_SHORT } from '../utils/time';
 import { STATUS_LABELS } from '../utils/status';
 import { markTaken } from '../reminders/actions';
 import { MEAL_LABELS } from '../reminders/schedule';
+import NativeAlarmStatus from '../components/NativeAlarmStatus';
 import type { JoinedReminder } from '../reminders/queries';
 
 function reminderTime(ts: number): string {
@@ -56,6 +57,8 @@ export default function Dashboard() {
     <section aria-labelledby="today-heading">
       <h1 id="today-heading">Today</h1>
       <p className="muted">{formatDateStr(new Date().toISOString().slice(0, 10))}</p>
+
+      <NativeAlarmStatus />
 
       {loading ? (
         <p className="muted">Loading…</p>
