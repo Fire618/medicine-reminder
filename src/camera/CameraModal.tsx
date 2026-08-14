@@ -30,35 +30,36 @@ export default function CameraModal({ title, onCapture, onClose }: CameraModalPr
           </button>
         </div>
         <div className="modal-body">
-          {starting ? (
-            <p className="muted">Starting camera…</p>
-          ) : error ? (
+          {starting && <p className="muted">Starting camera…</p>}
+          {error && (
             <div className="form-error-block" role="alert">
               <p>{error}</p>
               <button type="button" className="btn" onClick={onClose}>
                 Close
               </button>
             </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                className="camera-preview"
-                autoPlay
-                playsInline
-                muted
-                aria-label="Live camera preview"
-              />
-              <div className="form-actions">
-                <button type="button" className="btn" onClick={onClose}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn--primary" onClick={handleCapture}>
-                  Capture photo
-                </button>
-              </div>
-            </>
           )}
+          <video
+            ref={videoRef}
+            className="camera-preview"
+            autoPlay
+            playsInline
+            muted
+            aria-label="Live camera preview"
+          />
+          <div className="form-actions">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleCapture}
+              disabled={starting || Boolean(error)}
+            >
+              Capture photo
+            </button>
+          </div>
         </div>
       </div>
     </div>

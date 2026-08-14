@@ -16,36 +16,37 @@ export default function ConfirmationCamera({ error, onCapture, onCancel }: Confi
 
   return (
     <div className="confirm-camera">
-      {starting ? (
-        <p className="muted">Starting camera…</p>
-      ) : streamError ? (
+      {starting && <p className="muted">Starting camera…</p>}
+      {streamError && (
         <div className="form-error-block" role="alert">
           <p>{streamError}</p>
           <button type="button" className="btn" onClick={onCancel}>
             Go back
           </button>
         </div>
-      ) : (
-        <>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <video
-            ref={videoRef}
-            className="camera-preview"
-            autoPlay
-            playsInline
-            muted
-            aria-label="Live camera preview"
-          />
-          <div className="alarm-actions">
-            <button type="button" className="btn btn--primary" onClick={handleCapture}>
-              Capture photo
-            </button>
-            <button type="button" className="btn" onClick={onCancel}>
-              Cancel
-            </button>
-          </div>
-        </>
       )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <video
+        ref={videoRef}
+        className="camera-preview"
+        autoPlay
+        playsInline
+        muted
+        aria-label="Live camera preview"
+      />
+      <div className="alarm-actions">
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={handleCapture}
+          disabled={starting || Boolean(streamError)}
+        >
+          Capture photo
+        </button>
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
