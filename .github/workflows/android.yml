@@ -1,8 +1,8 @@
 name: Build Android APK
 
 # Builds a free, installable Android APK (debug) on every push to main.
-# Download it from the "Artifacts" section of a finished run:
-#   https://github.com/Fire618/medicine-reminder/actions/workflows/android.yml
+# Direct download link (always the newest build):
+#   https://github.com/Fire618/medicine-reminder/releases/latest/download/medicine-reminder.apk
 # The web app continues to deploy separately via deploy.yml.
 
 on:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -41,10 +41,22 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK (Actions artifact)
         uses: actions/upload-artifact@v4
         with:
           name: medicine-reminder-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish APK to Release (stable download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk medicine-reminder.apk
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest medicine-reminder.apk \
+            --title "Medicine Reminder (latest)" \
+            --notes "Latest build from commit \`${{ github.sha }}\`." \
+            --target "${{ github.sha }}"
+          echo "Download: https://github.com/Fire618/medicine-reminder/releases/latest/download/medicine-reminder.apk"
