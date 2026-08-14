@@ -80,15 +80,22 @@ export async function syncRemindersForMedicine(medicine: Medicine): Promise<void
 
 /**
  * Marks overdue reminders as 'missed' and returns how many were updated.
- * Gentle reminders are missed when their window has closed; others when the
- * scheduled time has passed.
+ * Gentle reminders are missed when their window has closed; fixed-time ones
+ * are only missed after a grace period so they aren't auto-marked while the
+ * person is still about to take them.
  */
+export const MISS_GRACE_MS = 2 * 60 * 60 * 1000;
+
 export async function markMissedReminders(): Promise<number> {
   const now = Date.now();
   const overdue = await db.reminders
     .where('status')
     .equals('pending')
-    .filter((r) => (r.gentle ? (r.windowEnd ?? r.scheduledTime) < now : r.scheduledTime < now))
+    .filter((r) =>
+      r.gentle
+        ? (r.windowEnd ?? r.scheduledTime) < now
+        : r.scheduledTime + MISS_GRACE_MS < now,
+    )
     .toArray();
   if (overdue.length === 0) return 0;
   await db.reminders.bulkUpdate(

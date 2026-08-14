@@ -12,10 +12,19 @@ import { db } from '../db/db';
 const TICK_MS = 10_000;
 
 /**
+ * A reminder more than this old when detected is treated as "stale": it came
+ * due while the app was closed/away, so it gets a quiet nudge instead of a
+ * loud alarm or blocking screen. Fresh doses (due while the app is awake)
+ * ring normally.
+ */
+const STALE_MS = 60_000;
+
+/**
  * Checks whether any reminder is due and, if so, starts the persistent alarm.
  * Safe to call repeatedly; it is a no-op while an alarm is already active.
  * Gentle (meal-window) reminders only send one notification and never start
- * the loud alarm, so they are skipped entirely once their nudge was sent.
+ * the loud alarm. Overdue-but-stale doses get a quiet notification rather
+ * than ringing, so opening the app never blasts an alarm for a late dose.
  */
 export async function checkDueAlarm(): Promise<void> {
   if (getActiveAlarm()) return;
@@ -47,6 +56,23 @@ export async function checkDueAlarm(): Promise<void> {
 
   const medicine = await db.medicines.get(reminder.medicineId);
   if (!medicine) return;
+
+  const stale = now - reminder.scheduledTime > STALE_MS;
+
+  if (stale) {
+    // Came due while the app was not awake: quiet notification once, no
+    // alarm sound and no blocking screen. It stays visible in Today.
+    if (reminder.triggeredAt === null) {
+      await db.reminders.update(reminder.id, { triggeredAt: now });
+      showDueAlarmNotification(
+        reminder.id,
+        medicine.name,
+        medicine.dosage,
+        reminder.scheduledTime,
+      );
+    }
+    return;
+  }
 
   if (reminder.triggeredAt === null) {
     await db.reminders.update(reminder.id, { triggeredAt: now });

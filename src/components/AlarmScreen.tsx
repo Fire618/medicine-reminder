@@ -17,17 +17,17 @@ import { analyzeImageBlob } from '../vision/analyze';
 import { compareVisualMetadata, type VisualComparison } from '../vision/compare';
 import ConfirmationCamera from './ConfirmationCamera';
 
-type Flow = 'intro' | 'camera' | 'checking' | 'result';
+type Flow = 'intro' | 'camera' | 'checking';
 
 export default function AlarmScreen() {
   const alarm = useAlarm();
   const cardRef = useRef<HTMLDivElement>(null);
   const [confirming, setConfirming] = useState(false);
   const [flow, setFlow] = useState<Flow>('intro');
-  const [comparison, setComparison] = useState<VisualComparison | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [completed, setCompleted] = useState<VisualComparison | null>(null);
 
-  useFocusTrap(cardRef, Boolean(alarm));
+  useFocusTrap(cardRef, Boolean(alarm) || Boolean(completed));
 
   const medicine = useLiveQuery(
     () => (alarm ? db.medicines.get(alarm.medicineId) : undefined),
@@ -38,13 +38,34 @@ export default function AlarmScreen() {
   useEffect(() => {
     setConfirming(false);
     setFlow('intro');
-    setComparison(null);
     setCaptureError(null);
+    setCompleted(null);
   }, [alarm?.reminderId]);
 
   useEffect(() => {
     if (alarm) focusFirst(cardRef.current);
   }, [alarm?.reminderId, flow]);
+
+  if (completed && !alarm) {
+    return (
+      <div className="alarm-overlay" role="alertdialog" aria-modal="true">
+        <div ref={cardRef} className="alarm-card">
+          <p className="alarm-eyebrow">Done</p>
+          <h2 id="alarm-title">Dose recorded as taken</h2>
+          <p className="muted">
+            {completed.match
+              ? `Visual match detected · consistency ${completed.score.toFixed(2)}.`
+              : 'Photo captured — the dose was recorded as taken.'}
+          </p>
+          <div className="alarm-actions">
+            <button type="button" className="btn btn--primary" onClick={() => setCompleted(null)}>
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!alarm) return null;
 
@@ -53,8 +74,8 @@ export default function AlarmScreen() {
     setActiveAlarm(null);
     setConfirming(false);
     setFlow('intro');
-    setComparison(null);
     setCaptureError(null);
+    setCompleted(null);
   };
 
   const resolve = async (action: () => Promise<void>) => {
@@ -72,8 +93,12 @@ export default function AlarmScreen() {
     try {
       const capturedMeta = await analyzeImageBlob(blob);
       const result = compareVisualMetadata(medicine?.visualMetadata ?? null, capturedMeta);
-      setComparison(result);
-      setFlow('result');
+      const verification = result.match ? 'match' : 'no-match';
+      // Record the dose and stop the alarm the moment a photo is captured.
+      await markTaken(alarm.reminderId, verification);
+      stopAlarmSound();
+      setActiveAlarm(null);
+      setCompleted(result);
     } catch (err) {
       console.error('Photo analysis failed', err);
       setCaptureError('The photo could not be analyzed. Please try again.');
@@ -99,9 +124,8 @@ export default function AlarmScreen() {
           <>
             {hasReference ? (
               <div className="alarm-note" role="note">
-                Take a live photo of the medicine for a quick visual consistency
-                check. The check only compares color and shape — it does not
-                identify or guarantee the medicine.
+                Take a live photo of the medicine. The alarm stops as soon as
+                the photo is captured and the dose is recorded as taken.
               </div>
             ) : (
               <div className="alarm-note" role="note">
@@ -177,81 +201,9 @@ export default function AlarmScreen() {
           </div>
         )}
 
-        {flow === 'result' && comparison && (
-          <div
-            className={`alarm-result ${comparison.match ? 'alarm-result--ok' : 'alarm-result--warn'}`}
-          >
-            <p className="alarm-result__heading">
-              {comparison.match
-                ? 'Visual match detected'
-                : 'The photo could not be visually matched'}
-            </p>
-            <p className="muted">Consistency score: {comparison.score.toFixed(2)}</p>
-
-            {comparison.match ? (
-              <div className="alarm-actions">
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  onClick={() => resolve(() => markTaken(alarm.reminderId, 'match'))}
-                >
-                  Yes, I took this medicine
-                </button>
-                <button type="button" className="btn" onClick={() => setFlow('intro')}>
-                  Back
-                </button>
-              </div>
-            ) : (
-              <>
-                <p className="alarm-result__note">
-                  This only means the photo doesn't look consistent with the
-                  stored reference — the medicine itself may still be correct.
-                  Nothing has been marked as taken and the reminder stays active.
-                </p>
-                <div className="alarm-actions">
-                  <button
-                    type="button"
-                    className="btn btn--primary"
-                    onClick={() => setFlow('camera')}
-                  >
-                    Retake photo
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => resolve(() => snoozeReminder(alarm.reminderId))}
-                  >
-                    Snooze {SNOOZE_MINUTES} min
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => resolve(() => skipReminder(alarm.reminderId))}
-                  >
-                    Skip this dose
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--danger"
-                    onClick={() => resolve(() => dismissReminder(alarm.reminderId))}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </>
-            )}
-
-            <p className="muted alarm-actions-note">
-              The visual check is a convenience comparison only. It cannot
-              identify a medicine, verify its safety, or confirm the correct
-              dose. Always confirm from the label or packaging.
-            </p>
-          </div>
-        )}
-
         <p className="muted alarm-actions-note">
-          Only confirming “taken” records the dose as taken. Snooze, Skip and
-          Dismiss do not.
+          Capturing a photo records the dose as taken and stops the alarm.
+          Snooze, Skip and Dismiss do not record it as taken.
         </p>
       </div>
     </div>
