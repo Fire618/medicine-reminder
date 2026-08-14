@@ -3,6 +3,7 @@ import AlarmBanner from './components/AlarmBanner';
 import AlarmScreen from './components/AlarmScreen';
 import { useReminderEngine } from './hooks/useReminderEngine';
 import { useAlarmController } from './alarm/useAlarmController';
+import { useNativeNotifications } from './native/useNativeNotifications';
 
 const navItems = [
   { to: '/', label: 'Today', end: true },
@@ -14,6 +15,7 @@ const navItems = [
 export default function App() {
   useReminderEngine();
   useAlarmController();
+  useNativeNotifications();
 
   return (
     <div className="app">

@@ -2,6 +2,7 @@ import { db } from '../db/db';
 import type { Medicine, Reminder } from '../db/types';
 import { newId } from '../utils/id';
 import { scheduledDates, scheduledMealWindows, scheduledTimes } from './schedule';
+import { scheduleNativeSync } from '../native/notifications';
 
 /**
  * Regenerates the materialized future reminders for a single medicine.
@@ -115,4 +116,5 @@ export async function runReminderMaintenance(): Promise<void> {
     }
   }
   await markMissedReminders();
+  scheduleNativeSync();
 }

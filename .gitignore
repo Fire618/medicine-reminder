@@ -7,3 +7,10 @@ dist-ssr
 
 # AI assistant local state and credentials
 .kimi-code/
+
+# Capacitor build outputs (the web app is synced in by `cap sync`)
+android/.gradle
+android/build
+android/local.properties
+android/app/build
+android/app/src/main/assets/public

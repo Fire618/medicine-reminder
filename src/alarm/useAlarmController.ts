@@ -8,6 +8,7 @@ import {
   showGentleReminderNotification,
 } from './notifications';
 import { db } from '../db/db';
+import { isNativePlatform, cancelNativeNotification } from '../native/notifications';
 
 const TICK_MS = 10_000;
 
@@ -43,13 +44,15 @@ export async function checkDueAlarm(): Promise<void> {
       const medicine = await db.medicines.get(reminder.medicineId);
       if (!medicine) return;
       await db.reminders.update(reminder.id, { triggeredAt: now });
-      showGentleReminderNotification(
-        reminder.id,
-        medicine.name,
-        medicine.dosage,
-        reminder.meal,
-        reminder.scheduledTime,
-      );
+      if (!isNativePlatform()) {
+        showGentleReminderNotification(
+          reminder.id,
+          medicine.name,
+          medicine.dosage,
+          reminder.meal,
+          reminder.scheduledTime,
+        );
+      }
     }
     return;
   }
@@ -64,18 +67,26 @@ export async function checkDueAlarm(): Promise<void> {
     // alarm sound and no blocking screen. It stays visible in Today.
     if (reminder.triggeredAt === null) {
       await db.reminders.update(reminder.id, { triggeredAt: now });
-      showDueAlarmNotification(
-        reminder.id,
-        medicine.name,
-        medicine.dosage,
-        reminder.scheduledTime,
-      );
+      if (!isNativePlatform()) {
+        showDueAlarmNotification(
+          reminder.id,
+          medicine.name,
+          medicine.dosage,
+          reminder.scheduledTime,
+        );
+      }
     }
     return;
   }
 
   if (reminder.triggeredAt === null) {
     await db.reminders.update(reminder.id, { triggeredAt: now });
+  }
+
+  // A native notification was scheduled for this exact moment; the in-app
+  // alarm is now ringing instead, so cancel it to avoid a double alarm.
+  if (isNativePlatform()) {
+    void cancelNativeNotification(reminder.id);
   }
 
   startAlarmSound();
@@ -87,7 +98,9 @@ export async function checkDueAlarm(): Promise<void> {
     scheduledTime: reminder.scheduledTime,
   };
   setActiveAlarm(alarm);
-  showDueAlarmNotification(alarm.reminderId, alarm.medicineName, alarm.dosage, alarm.scheduledTime);
+  if (!isNativePlatform()) {
+    showDueAlarmNotification(alarm.reminderId, alarm.medicineName, alarm.dosage, alarm.scheduledTime);
+  }
 }
 
 /**

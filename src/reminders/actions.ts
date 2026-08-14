@@ -1,6 +1,7 @@
 import { db } from '../db/db';
 import type { Medicine, Reminder, ReminderStatus, VerificationStatus } from '../db/types';
 import { newId } from '../utils/id';
+import { scheduleNativeSync } from '../native/notifications';
 
 export const SNOOZE_MINUTES = 5;
 
@@ -43,6 +44,7 @@ async function resolveReminder(
     });
     await recordHistory(reminder, medicine, status, verificationStatus, action);
   });
+  scheduleNativeSync();
 }
 
 /** Marks a reminder as taken after the user has explicitly confirmed. */
@@ -80,4 +82,5 @@ export async function snoozeReminder(
     });
     await recordHistory(reminder, medicine, 'snoozed', 'none', 'snooze');
   });
+  scheduleNativeSync();
 }
