@@ -4,6 +4,12 @@ import { cameraError, canvasToThumbnailBlob } from './utils';
 /**
  * Manages a live getUserMedia stream for the lifetime of the component.
  * Starts the camera on mount and stops all tracks on unmount.
+ *
+ * The start sequence is deliberately defensive: it waits for the stream's
+ * metadata before calling play(), sets muted/playsInline/autoplay directly
+ * on the element, and falls back to any camera when the rear-camera
+ * constraint is not supported. This avoids the classic "black preview"
+ * where the stream starts but frames never render.
  */
 export function useCameraStream() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -14,26 +20,62 @@ export function useCameraStream() {
     let stream: MediaStream | null = null;
     let cancelled = false;
 
+    const stopStream = () => {
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
           throw new DOMException('Camera API unavailable', 'NotSupportedError');
         }
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false,
+          });
+        } catch (e) {
+          if ((e as DOMException)?.name === 'OverconstrainedError') {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          } else {
+            throw e;
+          }
+        }
+
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+          stopStream();
           return;
         }
+
         const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play().catch(() => {
-            /* capture still works once frames are available */
+        if (!video) {
+          stopStream();
+          return;
+        }
+
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('autoplay', '');
+        video.srcObject = stream;
+
+        if (video.readyState < 1) {
+          await new Promise<void>((resolve) => {
+            const onReady = () => {
+              video.removeEventListener('loadedmetadata', onReady);
+              resolve();
+            };
+            video.addEventListener('loadedmetadata', onReady);
           });
         }
+
+        if (cancelled) return;
+        await video.play().catch(() => {
+          /* capture still works once frames are available */
+        });
       } catch (e) {
         if (!cancelled) setError(cameraError(e));
       } finally {
@@ -43,7 +85,7 @@ export function useCameraStream() {
 
     return () => {
       cancelled = true;
-      stream?.getTracks().forEach((t) => t.stop());
+      stopStream();
     };
   }, []);
 
