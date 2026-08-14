@@ -3,6 +3,7 @@ import type { Frequency, Meal, MealWindows, Medicine, MedicineInput } from '../d
 import { WEEKDAYS_SHORT, addDaysToDateStr, todayStr } from '../utils/time';
 import { DEFAULT_MEAL_WINDOWS, MEAL_LABELS, MEAL_ORDER } from '../reminders/schedule';
 import ReferenceImagePicker from './ReferenceImagePicker';
+import TimeField from './TimeField';
 import { analyzeImageBlob } from '../vision/analyze';
 
 type EndType = 'ongoing' | 'duration' | 'date';
@@ -293,24 +294,20 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
                   {MEAL_LABELS[meal]} window
                 </span>
                 <div className="time-row">
-                  <label>
+                  <div className="field">
                     <span className="muted">Opens</span>
-                    <input
-                      type="time"
+                    <TimeField
                       value={form.mealWindows[meal].start}
-                      aria-label={`${MEAL_LABELS[meal]} window opens`}
-                      onChange={(e) => setWindow(meal, 'start', e.target.value)}
+                      onChange={(v) => setWindow(meal, 'start', v)}
                     />
-                  </label>
-                  <label>
+                  </div>
+                  <div className="field">
                     <span className="muted">Closes</span>
-                    <input
-                      type="time"
+                    <TimeField
                       value={form.mealWindows[meal].end}
-                      aria-label={`${MEAL_LABELS[meal]} window closes`}
-                      onChange={(e) => setWindow(meal, 'end', e.target.value)}
+                      onChange={(v) => setWindow(meal, 'end', v)}
                     />
-                  </label>
+                  </div>
                 </div>
               </div>
             ))}
@@ -324,11 +321,10 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
         <div className="time-list">
           {form.times.map((t, i) => (
             <div key={i} className="time-row">
-              <input
-                type="time"
+              <TimeField
                 value={t}
-                aria-label={`Reminder time ${i + 1}`}
-                onChange={(e) => setTime(i, e.target.value)}
+                label={`Reminder time ${i + 1}`}
+                onChange={(v) => setTime(i, v)}
               />
               <button
                 type="button"

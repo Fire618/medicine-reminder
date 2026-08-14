@@ -360,6 +360,51 @@ h1 {
   margin-bottom: 0.25rem;
 }
 
+.time-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.time-field__sep {
+  font-weight: 700;
+}
+
+.time-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.time-stepper__btn {
+  width: 2rem;
+  height: 1.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.time-stepper__btn:hover {
+  border-color: var(--color-primary);
+}
+
+.time-stepper__btn:active {
+  background: var(--color-primary-light);
+}
+
+.time-stepper__value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.75rem;
+  text-align: center;
+}
+
 .time-list {
   display: grid;
   gap: 0.5rem;

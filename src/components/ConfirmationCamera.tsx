@@ -31,6 +31,7 @@ export default function ConfirmationCamera({ error, onCapture, onCancel }: Confi
           <video
             ref={videoRef}
             className="camera-preview"
+            autoPlay
             playsInline
             muted
             aria-label="Live camera preview"

@@ -44,6 +44,7 @@ export default function CameraModal({ title, onCapture, onClose }: CameraModalPr
               <video
                 ref={videoRef}
                 className="camera-preview"
+                autoPlay
                 playsInline
                 muted
                 aria-label="Live camera preview"
