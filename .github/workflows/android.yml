@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# Serialize runs: two pushes of the same commit (or a push + manual run)
+# otherwise race on the "latest" release/tag and one fails to publish.
+concurrency:
+  group: build-android-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -52,11 +58,27 @@ jobs:
       - name: Publish APK to Release (stable download link)
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk medicine-reminder.apk
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest medicine-reminder.apk \
-            --title "Medicine Reminder (latest)" \
-            --notes "Latest build from commit \`${{ github.sha }}\`." \
-            --target "${{ github.sha }}"
-          echo "Download: https://github.com/Fire618/medicine-reminder/releases/latest/download/medicine-reminder.apk"
+          # Delete+create the "latest" release, retrying a few times so a
+          # lingering release/tag from a previously failed run cannot fail this
+          # step. Concurrency above already prevents simultaneous runs racing.
+          for i in 1 2 3 4 5; do
+            if gh release delete latest --yes --cleanup-tag 2>/dev/null; then
+              :
+            else
+              echo "no existing 'latest' release to delete"
+            fi
+            if gh release create latest medicine-reminder.apk \
+              --title "Medicine Reminder (latest)" \
+              --notes "Latest build from commit \`${{ github.sha }}\`." \
+              --target "${{ github.sha }}"; then
+              echo "Download: https://github.com/Fire618/medicine-reminder/releases/latest/download/medicine-reminder.apk"
+              exit 0
+            fi
+            echo "release create failed (attempt $i), retrying..."
+            sleep 5
+          done
+          echo "giving up publishing after 5 attempts" >&2
+          exit 1
