@@ -69,6 +69,8 @@ export default function AlarmScreen() {
 
   if (!alarm) return null;
 
+  const forced = Boolean(alarm.forced);
+
   const stopAlarm = () => {
     stopAlarmSound();
     setActiveAlarm(null);
@@ -122,19 +124,38 @@ export default function AlarmScreen() {
 
         {flow === 'intro' && (
           <>
-            {hasReference ? (
-              <div className="alarm-note" role="note">
-                Take a live photo of the medicine. The alarm stops as soon as
-                the photo is captured and the dose is recorded as taken.
+            {forced ? (
+              <div className="alarm-note alarm-note--forced" role="note">
+                This alarm cannot be dismissed. Take a photo of the medicine to
+                record the dose as taken and stop the alarm.
               </div>
             ) : (
-              <div className="alarm-note" role="note">
-                No reference photo is set for this medicine, so no visual check
-                is available. You can confirm taking it manually.
-              </div>
+              <>
+                {hasReference ? (
+                  <div className="alarm-note" role="note">
+                    Take a live photo of the medicine. The alarm stops as soon as
+                    the photo is captured and the dose is recorded as taken.
+                  </div>
+                ) : (
+                  <div className="alarm-note" role="note">
+                    No reference photo is set for this medicine, so no visual check
+                    is available. You can confirm taking it manually.
+                  </div>
+                )}
+              </>
             )}
 
-            {confirming ? (
+            {forced ? (
+              <div className="alarm-actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => setFlow('camera')}
+                >
+                  Take photo to stop alarm
+                </button>
+              </div>
+            ) : confirming ? (
               <div className="alarm-confirm">
                 <p>
                   <strong>Please confirm:</strong> have you taken {alarm.medicineName}?
@@ -202,8 +223,9 @@ export default function AlarmScreen() {
         )}
 
         <p className="muted alarm-actions-note">
-          Capturing a photo records the dose as taken and stops the alarm.
-          Snooze, Skip and Dismiss do not record it as taken.
+          {forced
+            ? 'A photo is required. Capturing it records the dose as taken and stops the alarm.'
+            : 'Capturing a photo records the dose as taken and stops the alarm. Snooze, Skip and Dismiss do not record it as taken.'}
         </p>
       </div>
     </div>

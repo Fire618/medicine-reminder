@@ -1,0 +1,340 @@
+package com.fire618.medicinereminder;
+
+import android.app.AlarmManager;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Custom Capacitor plugin that schedules real OS alarms using
+ * AlarmManager.setAlarmClock() — exact, works in Doze and through silent/DND,
+ * and keeps firing even when the app process is killed. When an alarm fires,
+ * AlarmReceiver posts a full-screen intent notification that takes over the
+ * screen until the dose is confirmed.
+ */
+@CapacitorPlugin(name = "FullScreenAlarm")
+public class FullScreenAlarm extends Plugin {
+
+    public static final String PREFS = "full_screen_alarm";
+    public static final String KEY_ALARMS = "alarms";
+    public static final String EXTRA_REMINDER_ID = "extra_reminder_id";
+    public static final String EXTRA_TITLE = "extra_title";
+    public static final String EXTRA_BODY = "extra_body";
+    public static final String EXTRA_GENTLE = "extra_gentle";
+    public static final String ACTION_ALARM = "com.fire618.medicinereminder.ALARM";
+    public static final String CHANNEL_ID = "medicine_alarms";
+    public static final int REQUEST_FULL_SCREEN = 4021;
+    public static final long REARM_MS = 60_000L;
+
+    /** Set when the app is opened by a native alarm; consumed by JS on launch/resume. */
+    public static volatile String launchReminderId = null;
+
+    private static MediaPlayer ringtone = null;
+
+    public static int idFrom(String reminderId) {
+        return reminderId.hashCode() & 0x7fffffff;
+    }
+
+    public static void stopRingtone() {
+        MediaPlayer player = ringtone;
+        ringtone = null;
+        if (player != null) {
+            try {
+                if (player.isPlaying()) player.stop();
+            } catch (Exception ignored) {
+            }
+            player.release();
+        }
+    }
+
+    public static void startRingtone(Context context) {
+        stopRingtone();
+        try {
+            Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            MediaPlayer player = new MediaPlayer();
+            player.setAudioAttributes(
+                new AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+            );
+            player.setDataSource(context, uri);
+            player.setLooping(true);
+            player.prepare();
+            player.start();
+            ringtone = player;
+        } catch (Exception ignored) {
+            ringtone = null;
+        }
+    }
+
+    private static Intent alarmIntent(Context context, String reminderId, String title, String body, boolean gentle) {
+        return new Intent(context, AlarmReceiver.class)
+            .setAction(ACTION_ALARM)
+            .putExtra(EXTRA_REMINDER_ID, reminderId)
+            .putExtra(EXTRA_TITLE, title)
+            .putExtra(EXTRA_BODY, body)
+            .putExtra(EXTRA_GENTLE, gentle);
+    }
+
+    static PendingIntent alarmPendingIntent(Context context, String reminderId, String title, String body, boolean gentle) {
+        return PendingIntent.getBroadcast(
+            context,
+            idFrom(reminderId),
+            alarmIntent(context, reminderId, title, body, gentle),
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    public static List<JSONObject> storedAlarms(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_ALARMS, "[]");
+        JSONArray arr;
+        try {
+            arr = new JSONArray(raw);
+        } catch (Exception e) {
+            arr = new JSONArray();
+        }
+        List<JSONObject> list = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o != null) list.add(o);
+        }
+        return list;
+    }
+
+    public static void scheduleAlarm(Context context, String reminderId, long at, String title, String body, boolean gentle) {
+        PendingIntent pi = alarmPendingIntent(context, reminderId, title, body, gentle);
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        try {
+            if (at <= System.currentTimeMillis()) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 500, pi);
+            } else {
+                am.setAlarmClock(new AlarmManager.AlarmClockInfo(at, pi), pi);
+            }
+        } catch (Exception e) {
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+            } catch (Exception ignored) {
+            }
+        }
+        saveAlarm(context, reminderId, at, title, body, gentle);
+    }
+
+    private static void saveAlarm(Context context, String reminderId, long at, String title, String body, boolean gentle) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_ALARMS, "[]");
+        JSONArray arr;
+        try {
+            arr = new JSONArray(raw);
+        } catch (Exception e) {
+            arr = new JSONArray();
+        }
+        JSONArray out = new JSONArray();
+        boolean found = false;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            if (reminderId.equals(o.optString("reminderId"))) {
+                try {
+                    o.put("at", at).put("title", title).put("body", body).put("gentle", gentle);
+                } catch (Exception ignored) {
+                }
+                found = true;
+            }
+            out.put(o);
+        }
+        if (!found) {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("reminderId", reminderId)
+                    .put("at", at)
+                    .put("title", title)
+                    .put("body", body)
+                    .put("gentle", gentle);
+            } catch (Exception ignored) {
+            }
+            out.put(o);
+        }
+        prefs.edit().putString(KEY_ALARMS, out.toString()).apply();
+    }
+
+    public static void cancel(Context context, String reminderId) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String raw = prefs.getString(KEY_ALARMS, "[]");
+        JSONArray arr;
+        try {
+            arr = new JSONArray(raw);
+        } catch (Exception e) {
+            arr = new JSONArray();
+        }
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            if (!reminderId.equals(o.optString("reminderId"))) out.put(o);
+        }
+        prefs.edit().putString(KEY_ALARMS, out.toString()).apply();
+
+        PendingIntent pi = alarmPendingIntent(context, reminderId, "Medicine Reminder", "", false);
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        am.cancel(pi);
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        nm.cancel(idFrom(reminderId));
+        stopRingtone();
+    }
+
+    private static boolean isFullScreenAllowed(Context context) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                return nm.canUseFullScreenIntent();
+            } catch (Exception e) {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    @PluginMethod
+    public void schedule(PluginCall call) {
+        String reminderId = call.getString("reminderId");
+        if (reminderId == null) {
+            call.reject("missing reminderId");
+            return;
+        }
+        Long at = call.getLong("at");
+        if (at == null) {
+            call.reject("missing at");
+            return;
+        }
+        String title = call.getString("title");
+        if (title == null) title = "Medicine Reminder";
+        String body = call.getString("body");
+        if (body == null) body = "";
+        boolean gentle = call.getBoolean("gentle", false);
+        scheduleAlarm(context, reminderId, at, title, body, gentle);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        String reminderId = call.getString("reminderId");
+        if (reminderId != null) cancel(context, reminderId);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopRingtone(PluginCall call) {
+        stopRingtone();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void cancelAll(PluginCall call) {
+        for (JSONObject a : storedAlarms(context)) {
+            String rid = a.optString("reminderId");
+            if (!rid.isEmpty()) cancel(context, rid);
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getPending(PluginCall call) {
+        JSArray arr = new JSArray();
+        long now = System.currentTimeMillis();
+        for (JSONObject a : storedAlarms(context)) {
+            JSObject obj = new JSObject();
+            obj.put("reminderId", a.optString("reminderId"));
+            obj.put("at", a.optLong("at"));
+            obj.put("title", a.optString("title"));
+            obj.put("body", a.optString("body"));
+            obj.put("gentle", a.optBoolean("gentle"));
+            obj.put("future", a.optLong("at") > now);
+            arr.put(obj);
+        }
+        JSObject ret = new JSObject();
+        ret.put("alarms", arr);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getStatus(PluginCall call) {
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        JSObject ret = new JSObject();
+        ret.put("notifications", nm.areNotificationsEnabled() ? "granted" : "denied");
+        ret.put("exactAlarm", canExactAlarm() ? "granted" : "denied");
+        ret.put("fullScreen", isFullScreenAllowed(context));
+        ret.put("pending", storedAlarms(context).size());
+        call.resolve(ret);
+    }
+
+    private boolean canExactAlarm() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            return am.canScheduleExactAlarms();
+        }
+        return true;
+    }
+
+    @PluginMethod
+    public void isFullScreenAllowed(PluginCall call) {
+        call.resolve(new JSObject().put("allowed", isFullScreenAllowed(context)));
+    }
+
+    @PluginMethod
+    public void requestFullScreen(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 34 && !isFullScreenAllowed(context)) {
+            saveCall(call);
+            Intent intent = new Intent(
+                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                Uri.parse("package:" + getActivity().getPackageName())
+            );
+            startActivityForResult(intent, REQUEST_FULL_SCREEN);
+        } else {
+            call.resolve(new JSObject().put("allowed", true));
+        }
+    }
+
+    @Override
+    public void handleOnActivityResult(int requestCode, int resultCode, Intent data) {
+        super.handleOnActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_FULL_SCREEN) {
+            PluginCall savedCall = getSavedCall(REQUEST_FULL_SCREEN);
+            if (savedCall != null) {
+                savedCall.resolve(new JSObject().put("allowed", isFullScreenAllowed(context)));
+            }
+        }
+    }
+
+    @PluginMethod
+    public void consumeLaunchReminder(PluginCall call) {
+        String id = launchReminderId;
+        launchReminderId = null;
+        JSObject ret = new JSObject();
+        if (id != null) ret.put("reminderId", id);
+        call.resolve(ret);
+    }
+}

@@ -8,7 +8,7 @@ import {
   showGentleReminderNotification,
 } from './notifications';
 import { db } from '../db/db';
-import { isNativePlatform, cancelNativeNotification } from '../native/notifications';
+import { isNativePlatform } from '../native/notifications';
 
 const TICK_MS = 10_000;
 
@@ -24,8 +24,10 @@ const STALE_MS = 60_000;
  * Checks whether any reminder is due and, if so, starts the persistent alarm.
  * Safe to call repeatedly; it is a no-op while an alarm is already active.
  * Gentle (meal-window) reminders only send one notification and never start
- * the loud alarm. Overdue-but-stale doses get a quiet notification rather
- * than ringing, so opening the app never blasts an alarm for a late dose.
+ * the loud alarm. On native the OS alarm rings and the forced (photo-
+ * mandatory) screen always shows for non-gentle doses. On web, overdue-but-
+ * stale doses get a quiet notification rather than ringing, so opening the
+ * app never blasts an alarm for a late dose.
  */
 export async function checkDueAlarm(): Promise<void> {
   if (getActiveAlarm()) return;
@@ -60,6 +62,24 @@ export async function checkDueAlarm(): Promise<void> {
   const medicine = await db.medicines.get(reminder.medicineId);
   if (!medicine) return;
 
+  if (isNativePlatform()) {
+    // Native: the OS alarm (setAlarmClock + 60s re-arm) provides the loud
+    // ringtone and full-screen nag. Always show the blocking forced screen,
+    // photo mandatory, even for stale doses — no snooze or dismissal.
+    if (reminder.triggeredAt === null) {
+      await db.reminders.update(reminder.id, { triggeredAt: now });
+    }
+    setActiveAlarm({
+      reminderId: reminder.id,
+      medicineId: medicine.id,
+      medicineName: medicine.name,
+      dosage: medicine.dosage,
+      scheduledTime: reminder.scheduledTime,
+      forced: true,
+    });
+    return;
+  }
+
   const stale = now - reminder.scheduledTime > STALE_MS;
 
   if (stale) {
@@ -67,26 +87,18 @@ export async function checkDueAlarm(): Promise<void> {
     // alarm sound and no blocking screen. It stays visible in Today.
     if (reminder.triggeredAt === null) {
       await db.reminders.update(reminder.id, { triggeredAt: now });
-      if (!isNativePlatform()) {
-        showDueAlarmNotification(
-          reminder.id,
-          medicine.name,
-          medicine.dosage,
-          reminder.scheduledTime,
-        );
-      }
+      showDueAlarmNotification(
+        reminder.id,
+        medicine.name,
+        medicine.dosage,
+        reminder.scheduledTime,
+      );
     }
     return;
   }
 
   if (reminder.triggeredAt === null) {
     await db.reminders.update(reminder.id, { triggeredAt: now });
-  }
-
-  // A native notification was scheduled for this exact moment; the in-app
-  // alarm is now ringing instead, so cancel it to avoid a double alarm.
-  if (isNativePlatform()) {
-    void cancelNativeNotification(reminder.id);
   }
 
   startAlarmSound();
@@ -98,9 +110,7 @@ export async function checkDueAlarm(): Promise<void> {
     scheduledTime: reminder.scheduledTime,
   };
   setActiveAlarm(alarm);
-  if (!isNativePlatform()) {
-    showDueAlarmNotification(alarm.reminderId, alarm.medicineName, alarm.dosage, alarm.scheduledTime);
-  }
+  showDueAlarmNotification(alarm.reminderId, alarm.medicineName, alarm.dosage, alarm.scheduledTime);
 }
 
 /**

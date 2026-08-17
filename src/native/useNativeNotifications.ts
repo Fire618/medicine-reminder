@@ -1,24 +1,41 @@
 import { useEffect } from 'react';
 import { db } from '../db/db';
 import { stopAlarmSound } from '../alarm/sound';
-import { setActiveAlarm } from '../alarm/alarmStore';
+import { getActiveAlarm, setActiveAlarm } from '../alarm/alarmStore';
+import { FullScreenAlarm } from './alarmPlugin';
 import {
   isNativePlatform,
   onNativeAppResume,
-  onNativeNotificationTap,
   requestNativeNotificationPermission,
   syncNativeNotifications,
 } from './notifications';
 
+async function showForcedAlarm(reminderId: string): Promise<void> {
+  const reminder = await db.reminders.get(reminderId);
+  if (!reminder) return;
+  if (reminder.status !== 'pending' && reminder.status !== 'snoozed') return;
+  const medicine = await db.medicines.get(reminder.medicineId);
+  if (!medicine) return;
+  // Already handling this dose (e.g. user is mid-photo) — don't reset the UI.
+  if (getActiveAlarm()?.reminderId === reminderId) return;
+  stopAlarmSound();
+  setActiveAlarm({
+    reminderId: reminder.id,
+    medicineId: medicine.id,
+    medicineName: medicine.name,
+    dosage: medicine.dosage,
+    scheduledTime: reminder.scheduledTime,
+    forced: true,
+  });
+}
+
 /**
- * Keeps the OS notification schedule in sync with the on-device reminders
- * while running inside the Capacitor (Android) app. The native notifications
- * are what fire when the app is killed; the web alarm controller only handles
- * the foreground experience.
+ * Keeps the OS alarm schedule in sync with the on-device reminders and shows
+ * the forced alarm screen when the app is launched by a native alarm.
  *
- * Ordering matters on Android 13+: the very first sync must wait for the
- * notification-permission prompt to be answered, because the plugin refuses
- * to schedule anything while notifications are disabled.
+ * Ordering matters on Android 13+: the first sync must wait for the
+ * notification-permission prompt to be answered, because scheduling is refused
+ * while notifications are disabled.
  */
 export function useNativeNotifications(): void {
   useEffect(() => {
@@ -32,38 +49,28 @@ export function useNativeNotifications(): void {
       if (permission === 'granted') {
         await syncNativeNotifications();
       } else {
-        // Denied (or prompt still unresolved): retry once after a short delay
-        // in case the OS shows the prompt on first interaction.
         window.setTimeout(() => {
           if (!disposed) void syncNativeNotifications();
         }, 1500);
       }
     })();
 
-    const unregisterTap = onNativeNotificationTap(async (reminderId) => {
-      // User opened the app from a fired notification: show the dose screen
-      // for that reminder (native notification already sounded the alarm).
-      const reminder = await db.reminders.get(reminderId);
-      if (!reminder) return;
-      const medicine = await db.medicines.get(reminder.medicineId);
-      if (!medicine) return;
-      stopAlarmSound();
-      setActiveAlarm({
-        reminderId: reminder.id,
-        medicineId: medicine.id,
-        medicineName: medicine.name,
-        dosage: medicine.dosage,
-        scheduledTime: reminder.scheduledTime,
+    const consume = () => {
+      void FullScreenAlarm.consumeLaunchReminder().then((r) => {
+        if (disposed) return;
+        if (r.reminderId) void showForcedAlarm(r.reminderId);
       });
-    });
+    };
 
+    // Cold start launched by a native alarm, and each return to the foreground.
+    consume();
     const unregisterResume = onNativeAppResume(() => {
+      consume();
       void syncNativeNotifications();
     });
 
     return () => {
       disposed = true;
-      unregisterTap();
       unregisterResume();
     };
   }, []);

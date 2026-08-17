@@ -1,16 +1,13 @@
 import { Capacitor } from '@capacitor/core';
-import {
-  LocalNotifications,
-  type LocalNotificationSchema,
-} from '@capacitor/local-notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { App } from '@capacitor/app';
+import { FullScreenAlarm, type ScheduledAlarm } from './alarmPlugin';
 import { db } from '../db/db';
 import { formatTime } from '../utils/time';
 import { MEAL_LABELS } from '../reminders/schedule';
 import type { Meal } from '../db/types';
 
 const SYNC_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
-const CHANNEL_ID = 'reminders';
 
 export function isNativePlatform(): boolean {
   return Capacitor.isNativePlatform();
@@ -18,38 +15,8 @@ export function isNativePlatform(): boolean {
 
 export type NotificationPermState = 'granted' | 'denied' | 'prompt';
 
-/** Stable non-negative integer id derived from a reminder id (plugin requires ints). */
-export function numericId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  }
-  return (h & 0x7fffffff) || 1;
-}
-
 function mealLabel(meal: Meal | null): string {
   return meal ? MEAL_LABELS[meal].toLowerCase() : 'meal';
-}
-
-/**
- * The notification channel must NOT be given a `sound`: the plugin maps it to
- * a raw resource URI (android.resource://<pkg>/raw/<name>) and "default" points
- * at a resource that does not exist, which silently silences the whole
- * channel. Leaving it unset makes Android use the system default sound.
- */
-async function ensureChannel(): Promise<void> {
-  try {
-    await LocalNotifications.createChannel({
-      id: CHANNEL_ID,
-      name: 'Medicine reminders',
-      description: 'Reminders for scheduled doses',
-      importance: 5,
-      vibration: true,
-      visibility: 1,
-    });
-  } catch (err) {
-    console.error('Failed to create notification channel', err);
-  }
 }
 
 export async function checkNotificationPermission(): Promise<NotificationPermState> {
@@ -75,21 +42,35 @@ export async function requestNativeNotificationPermission(): Promise<Notificatio
 export async function checkExactAlarmSetting(): Promise<'granted' | 'denied'> {
   if (!isNativePlatform()) return 'granted';
   try {
-    const status = await LocalNotifications.checkExactNotificationSetting();
-    return (status.exact_alarm as 'granted' | 'denied') ?? 'denied';
+    const status = await FullScreenAlarm.getStatus();
+    return status.exactAlarm;
   } catch {
     return 'granted';
   }
 }
 
-/** Opens the system "Alarms & reminders" settings screen (Android 12+). */
+/** Exact alarms are scheduled via setAlarmClock which needs no special permission. */
 export async function requestExactAlarmPermission(): Promise<'granted' | 'denied'> {
-  if (!isNativePlatform()) return 'granted';
+  return checkExactAlarmSetting();
+}
+
+export async function isFullScreenAllowed(): Promise<boolean> {
+  if (!isNativePlatform()) return true;
   try {
-    const status = await LocalNotifications.changeExactNotificationSetting();
-    return (status.exact_alarm as 'granted' | 'denied') ?? 'denied';
+    const r = await FullScreenAlarm.isFullScreenAllowed();
+    return r.allowed;
   } catch {
-    return 'granted';
+    return true;
+  }
+}
+
+export async function requestFullScreenPermission(): Promise<boolean> {
+  if (!isNativePlatform()) return true;
+  try {
+    const r = await FullScreenAlarm.requestFullScreen();
+    return r.allowed;
+  } catch {
+    return true;
   }
 }
 
@@ -103,11 +84,10 @@ export type NativeSyncResult = {
 let lastSync: { at: number; ok: boolean; error?: string } | null = null;
 
 /**
- * Reconciles the OS notification schedule with the reminders currently stored
- * on the device. Runs on launch, on resume, and whenever reminders change.
- * Only schedules/cancels the difference, so a transient failure cannot wipe
- * the whole schedule. Notifications survive the app being killed because they
- * are registered with the OS AlarmManager.
+ * Reconciles the OS alarm schedule with the reminders stored on the device.
+ * Runs on launch, on resume, and whenever reminders change. Alarms are
+ * registered with AlarmManager (setAlarmClock), so they fire exactly on time
+ * and survive the app being killed.
  */
 export async function syncNativeNotifications(): Promise<NativeSyncResult> {
   const empty: NativeSyncResult = { skipped: true, canceled: 0, scheduled: 0, pending: 0 };
@@ -119,17 +99,17 @@ export async function syncNativeNotifications(): Promise<NativeSyncResult> {
       return { ...empty, skipped: false };
     }
 
-    await ensureChannel();
     const now = Date.now();
     const reminders = await db.reminders.toArray();
     const meds = await db.medicines.toArray();
     const medById = new Map(meds.map((m) => [m.id, m]));
 
-    const desired: LocalNotificationSchema[] = [];
+    const desired: ScheduledAlarm[] = [];
     for (const r of reminders) {
       const statusOk = r.status === 'pending' || r.status === 'snoozed';
-      const inHorizon =
-        r.scheduledTime >= now && r.scheduledTime <= now + SYNC_HORIZON_MS;
+      // Past-due pending reminders are kept so the native alarm (which re-arms
+      // itself every 60s) keeps nagging until the dose is confirmed.
+      const inHorizon = r.scheduledTime <= now + SYNC_HORIZON_MS;
       if (!statusOk || !inHorizon) continue;
       const medicine = medById.get(r.medicineId);
       if (!medicine || !medicine.active) continue;
@@ -146,67 +126,75 @@ export async function syncNativeNotifications(): Promise<NativeSyncResult> {
       if (medicine.dosage) body += ` · ${medicine.dosage}`;
 
       desired.push({
-        id: numericId(r.id),
+        reminderId: r.id,
+        at: r.scheduledTime,
         title: `${medicine.name} — time to take`,
         body,
-        schedule: { at: new Date(r.scheduledTime), allowWhileIdle: true },
-        extra: { reminderId: r.id },
-        channelId: CHANNEL_ID,
+        gentle: Boolean(r.gentle),
+        future: true,
       });
     }
 
-    const desiredById = new Map(desired.map((d) => [d.extra.reminderId as string, String(d.id)]));
-    const pending = await LocalNotifications.getPending();
-    const existingByRid = new Map<string, LocalNotificationSchema>();
-    for (const n of pending.notifications) {
-      const rid = (n.extra as { reminderId?: string } | null)?.reminderId;
-      if (rid) existingByRid.set(rid, n);
+    const desiredByRid = new Map(desired.map((d) => [d.reminderId, d]));
+    const existing = await FullScreenAlarm.getPending();
+    const existingByRid = new Map(existing.alarms.map((a) => [a.reminderId, a]));
+
+    const toCancel: string[] = [];
+    for (const rid of existingByRid.keys()) {
+      if (!desiredByRid.has(rid)) toCancel.push(rid);
+    }
+    for (const rid of toCancel) {
+      await FullScreenAlarm.cancel({ reminderId: rid });
     }
 
-    const toCancel: LocalNotificationSchema[] = [];
-    for (const [rid, n] of existingByRid) {
-      if (!desiredById.has(rid)) toCancel.push(n);
-    }
-    if (toCancel.length > 0) {
-      await LocalNotifications.cancel({ notifications: toCancel });
-    }
-
-    const toSchedule: LocalNotificationSchema[] = [];
+    let scheduled = 0;
     for (const d of desired) {
-      const rid = d.extra.reminderId as string;
-      if (!existingByRid.has(rid)) toSchedule.push(d);
-    }
-    if (toSchedule.length > 0) {
-      await LocalNotifications.schedule({ notifications: toSchedule });
+      const existing = existingByRid.get(d.reminderId);
+      if (!existing) {
+        await FullScreenAlarm.schedule({
+          reminderId: d.reminderId,
+          at: d.at,
+          title: d.title,
+          body: d.body,
+          gentle: d.gentle,
+        });
+        scheduled += 1;
+      } else if (existing.at !== d.at || existing.gentle !== d.gentle) {
+        // Time changed (e.g. snoozed) — reschedule the OS alarm.
+        await FullScreenAlarm.cancel({ reminderId: d.reminderId });
+        await FullScreenAlarm.schedule({
+          reminderId: d.reminderId,
+          at: d.at,
+          title: d.title,
+          body: d.body,
+          gentle: d.gentle,
+        });
+        scheduled += 1;
+      }
     }
 
     lastSync = { at: Date.now(), ok: true };
     return {
       skipped: false,
       canceled: toCancel.length,
-      scheduled: toSchedule.length,
-      pending: pending.notifications.length - toCancel.length + toSchedule.length,
+      scheduled,
+      pending: (await FullScreenAlarm.getPending()).alarms.length,
     };
   } catch (err) {
     lastSync = { at: Date.now(), ok: false, error: err instanceof Error ? err.message : String(err) };
-    console.error('Native notification sync failed', err);
+    console.error('Native alarm sync failed', err);
     return { ...empty, skipped: false };
   }
 }
 
-/** Removes the native notification for one reminder (e.g. before ringing in-app). */
+/** Removes the OS alarm for one reminder (e.g. after the dose is completed). */
 export async function cancelNativeNotification(reminderId: string): Promise<void> {
   if (!isNativePlatform()) return;
   try {
-    const pending = await LocalNotifications.getPending();
-    const targets = pending.notifications.filter(
-      (n) => (n.extra as { reminderId?: string } | null)?.reminderId === reminderId,
-    );
-    if (targets.length > 0) {
-      await LocalNotifications.cancel({ notifications: targets });
-    }
+    await FullScreenAlarm.cancel({ reminderId });
+    await FullScreenAlarm.stopRingtone();
   } catch (err) {
-    console.error('Failed to cancel native notification', err);
+    console.error('Failed to cancel native alarm', err);
   }
 }
 
@@ -224,21 +212,6 @@ export function scheduleNativeSync(): void {
   }, 300);
 }
 
-/** Fires when the user taps a scheduled notification. */
-export function onNativeNotificationTap(cb: (reminderId: string) => void): () => void {
-  if (!isNativePlatform()) return () => undefined;
-  const promise = LocalNotifications.addListener(
-    'localNotificationActionPerformed',
-    (e) => {
-      const reminderId = (e.notification.extra as { reminderId?: string } | null)?.reminderId;
-      if (reminderId) cb(reminderId);
-    },
-  );
-  return () => {
-    void promise.then((listener) => listener.remove());
-  };
-}
-
 /** Fires when the app returns to the foreground. */
 export function onNativeAppResume(cb: () => void): () => void {
   if (!isNativePlatform()) return () => undefined;
@@ -254,9 +227,9 @@ export type NativeStatus = {
   platform: boolean;
   notifications: NotificationPermState;
   exactAlarm: 'granted' | 'denied';
+  fullScreen: boolean;
   pendingCount: number;
   next: { title: string; body: string; at: number } | null;
-  nextPending: { title: string; body: string; at: number } | null;
   lastSync: { at: number; ok: boolean; error?: string } | null;
 };
 
@@ -268,36 +241,31 @@ export async function getNativeStatus(): Promise<NativeStatus> {
       platform,
       notifications: 'prompt',
       exactAlarm: 'granted',
+      fullScreen: true,
       pendingCount: 0,
       next: null,
-      nextPending: null,
       lastSync: null,
     };
   }
   try {
-    const [permission, exactAlarm, pending] = await Promise.all([
+    const [permission, status, pending] = await Promise.all([
       checkNotificationPermission(),
-      checkExactAlarmSetting(),
-      LocalNotifications.getPending(),
+      FullScreenAlarm.getStatus(),
+      FullScreenAlarm.getPending(),
     ]);
     const now = Date.now();
-    type PendingEntry = { title: string; body: string; at: number | null; rid?: string };
-    const upcoming = pending.notifications
-      .map<PendingEntry>((n) => ({
-        title: n.title,
-        body: n.body,
-        at: n.schedule?.at ? n.schedule.at.getTime() : null,
-        rid: (n.extra as { reminderId?: string } | null)?.reminderId,
-      }))
-      .filter((n): n is PendingEntry & { at: number } => n.at !== null && n.at >= now)
+    const upcoming = pending.alarms
+      .filter((a) => a.at >= now)
       .sort((a, b) => a.at - b.at);
     return {
       platform,
       notifications: permission,
-      exactAlarm,
-      pendingCount: pending.notifications.length,
-      next: upcoming[0] ? { title: upcoming[0].title, body: upcoming[0].body, at: upcoming[0].at } : null,
-      nextPending: null,
+      exactAlarm: status.exactAlarm,
+      fullScreen: status.fullScreen,
+      pendingCount: status.pending,
+      next: upcoming[0]
+        ? { title: upcoming[0].title, body: upcoming[0].body, at: upcoming[0].at }
+        : null,
       lastSync,
     };
   } catch (err) {
@@ -305,10 +273,14 @@ export async function getNativeStatus(): Promise<NativeStatus> {
       platform,
       notifications: 'denied',
       exactAlarm: 'denied',
+      fullScreen: false,
       pendingCount: 0,
       next: null,
-      nextPending: null,
-      lastSync: lastSync ?? { at: Date.now(), ok: false, error: err instanceof Error ? err.message : String(err) },
+      lastSync: lastSync ?? {
+        at: Date.now(),
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      },
     };
   }
 }

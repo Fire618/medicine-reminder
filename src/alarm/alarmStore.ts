@@ -6,6 +6,8 @@ export type ActiveAlarm = {
   medicineName: string;
   dosage: string;
   scheduledTime: number;
+  /** True when opened from a native full-screen alarm: photo is mandatory, no snooze/dismiss. */
+  forced?: boolean;
 };
 
 let active: ActiveAlarm | null = null;

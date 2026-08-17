@@ -4,15 +4,20 @@ import {
   getNativeStatus,
   isNativePlatform,
   requestExactAlarmPermission,
+  requestFullScreenPermission,
   requestNativeNotificationPermission,
   syncNativeNotifications,
   type NativeStatus,
 } from '../native/notifications';
 
 function badge(state: string | null): string {
-  if (state === 'granted') return 'badge badge--ok';
+  if (state === 'granted' || state === 'allowed') return 'badge badge--ok';
   if (state === 'denied') return 'badge badge--danger';
   return 'badge badge--neutral';
+}
+
+function boolBadge(value: boolean): string {
+  return value ? 'badge badge--ok' : 'badge badge--danger';
 }
 
 export default function NativeAlarmStatus() {
@@ -37,41 +42,17 @@ export default function NativeAlarmStatus() {
   if (!isNativePlatform()) return null;
   if (!status) return null;
 
-  const enableNotifications = async () => {
-    setBusy(true);
-    try {
-      const permission = await requestNativeNotificationPermission();
-      if (permission === 'granted') {
-        await syncNativeNotifications();
-      }
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
-
-  const enableExactAlarm = async () => {
-    setBusy(true);
-    try {
-      await requestExactAlarmPermission();
-      await syncNativeNotifications();
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
-
   const problems: string[] = [];
   if (status.notifications !== 'granted') {
-    problems.push('Notifications are disabled — alarms cannot fire.');
+    problems.push('Notifications are disabled — alarms cannot be scheduled.');
   }
-  if (status.exactAlarm === 'denied') {
+  if (!status.fullScreen) {
     problems.push(
-      'Exact alarms are off — scheduled alarms may be delayed by the phone (Android 14+).',
+      'Full-screen alarms are off — enable them so the alarm takes over the screen.',
     );
   }
   if (status.pendingCount === 0 && status.notifications === 'granted') {
-    problems.push('No alarms are scheduled yet.');
+    problems.push('No alarms are scheduled yet. Add a medicine with times to get started.');
   }
 
   return (
@@ -95,7 +76,16 @@ export default function NativeAlarmStatus() {
             type="button"
             className="btn btn--compact"
             disabled={busy}
-            onClick={enableNotifications}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const permission = await requestNativeNotificationPermission();
+                if (permission === 'granted') await syncNativeNotifications();
+              } finally {
+                setBusy(false);
+                refresh();
+              }
+            }}
           >
             Allow
           </button>
@@ -103,13 +93,47 @@ export default function NativeAlarmStatus() {
       </p>
 
       <p style={{ margin: '0 0 0.5rem' }}>
-        Exact alarms: <span className={badge(status.exactAlarm)}>{status.exactAlarm}</span>
+        Full-screen alarms:{' '}
+        <span className={boolBadge(status.fullScreen)}>{status.fullScreen ? 'allowed' : 'off'}</span>
+        {!status.fullScreen && (
+          <button
+            type="button"
+            className="btn btn--compact"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await requestFullScreenPermission();
+                await syncNativeNotifications();
+              } finally {
+                setBusy(false);
+                refresh();
+              }
+            }}
+          >
+            Enable
+          </button>
+        )}
+      </p>
+
+      <p style={{ margin: '0 0 0.5rem' }}>
+        Exact alarms:{' '}
+        <span className={badge(status.exactAlarm)}>{status.exactAlarm}</span>
         {status.exactAlarm === 'denied' && (
           <button
             type="button"
             className="btn btn--compact"
             disabled={busy}
-            onClick={enableExactAlarm}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await requestExactAlarmPermission();
+                await syncNativeNotifications();
+              } finally {
+                setBusy(false);
+                refresh();
+              }
+            }}
           >
             Enable
           </button>

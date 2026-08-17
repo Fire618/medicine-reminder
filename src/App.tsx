@@ -4,6 +4,9 @@ import AlarmScreen from './components/AlarmScreen';
 import { useReminderEngine } from './hooks/useReminderEngine';
 import { useAlarmController } from './alarm/useAlarmController';
 import { useNativeNotifications } from './native/useNativeNotifications';
+import { isNativePlatform } from './native/notifications';
+
+const APP_VERSION = '0.2.0';
 
 const navItems = [
   { to: '/', label: 'Today', end: true },
@@ -23,6 +26,10 @@ export default function App() {
         <NavLink to="/" className="app-brand" aria-label="Medicine Reminder home">
           <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="28" height="28" />
           <span>Medicine Reminder</span>
+          <span className="app-version">
+            v{APP_VERSION}
+            {isNativePlatform() ? ' · Native' : ''}
+          </span>
         </NavLink>
         <nav className="app-nav" aria-label="Primary">
           {navItems.map((item) => (
