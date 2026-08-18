@@ -18,7 +18,10 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import androidx.activity.result.ActivityResult;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,7 +47,6 @@ public class FullScreenAlarm extends Plugin {
     public static final String EXTRA_GENTLE = "extra_gentle";
     public static final String ACTION_ALARM = "com.fire618.medicinereminder.ALARM";
     public static final String CHANNEL_ID = "medicine_alarms";
-    public static final int REQUEST_FULL_SCREEN = 4021;
     public static final long REARM_MS = 60_000L;
 
     /** Set when the app is opened by a native alarm; consumed by JS on launch/resume. */
@@ -235,14 +237,14 @@ public class FullScreenAlarm extends Plugin {
         String body = call.getString("body");
         if (body == null) body = "";
         boolean gentle = call.getBoolean("gentle", false);
-        scheduleAlarm(context, reminderId, at, title, body, gentle);
+        scheduleAlarm(getContext(), reminderId, at, title, body, gentle);
         call.resolve();
     }
 
     @PluginMethod
     public void cancel(PluginCall call) {
         String reminderId = call.getString("reminderId");
-        if (reminderId != null) cancel(context, reminderId);
+        if (reminderId != null) cancel(getContext(), reminderId);
         call.resolve();
     }
 
@@ -254,9 +256,9 @@ public class FullScreenAlarm extends Plugin {
 
     @PluginMethod
     public void cancelAll(PluginCall call) {
-        for (JSONObject a : storedAlarms(context)) {
+        for (JSONObject a : storedAlarms(getContext())) {
             String rid = a.optString("reminderId");
-            if (!rid.isEmpty()) cancel(context, rid);
+            if (!rid.isEmpty()) cancel(getContext(), rid);
         }
         call.resolve();
     }
@@ -265,7 +267,7 @@ public class FullScreenAlarm extends Plugin {
     public void getPending(PluginCall call) {
         JSArray arr = new JSArray();
         long now = System.currentTimeMillis();
-        for (JSONObject a : storedAlarms(context)) {
+        for (JSONObject a : storedAlarms(getContext())) {
             JSObject obj = new JSObject();
             obj.put("reminderId", a.optString("reminderId"));
             obj.put("at", a.optLong("at"));
@@ -282,18 +284,18 @@ public class FullScreenAlarm extends Plugin {
 
     @PluginMethod
     public void getStatus(PluginCall call) {
-        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
         JSObject ret = new JSObject();
         ret.put("notifications", nm.areNotificationsEnabled() ? "granted" : "denied");
         ret.put("exactAlarm", canExactAlarm() ? "granted" : "denied");
-        ret.put("fullScreen", isFullScreenAllowed(context));
-        ret.put("pending", storedAlarms(context).size());
+        ret.put("fullScreen", isFullScreenAllowed(getContext()));
+        ret.put("pending", storedAlarms(getContext()).size());
         call.resolve(ret);
     }
 
     private boolean canExactAlarm() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            AlarmManager am = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
             return am.canScheduleExactAlarms();
         }
         return true;
@@ -301,32 +303,25 @@ public class FullScreenAlarm extends Plugin {
 
     @PluginMethod
     public void isFullScreenAllowed(PluginCall call) {
-        call.resolve(new JSObject().put("allowed", isFullScreenAllowed(context)));
+        call.resolve(new JSObject().put("allowed", isFullScreenAllowed(getContext())));
     }
 
     @PluginMethod
     public void requestFullScreen(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= 34 && !isFullScreenAllowed(context)) {
-            saveCall(call);
+        if (Build.VERSION.SDK_INT >= 34 && !isFullScreenAllowed(getContext())) {
             Intent intent = new Intent(
                 Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                Uri.parse("package:" + getActivity().getPackageName())
+                Uri.parse("package:" + getBridge().getActivity().getPackageName())
             );
-            startActivityForResult(intent, REQUEST_FULL_SCREEN);
+            startActivityForResult(call, intent, "requestFullScreenCallback");
         } else {
             call.resolve(new JSObject().put("allowed", true));
         }
     }
 
-    @Override
-    public void handleOnActivityResult(int requestCode, int resultCode, Intent data) {
-        super.handleOnActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_FULL_SCREEN) {
-            PluginCall savedCall = getSavedCall(REQUEST_FULL_SCREEN);
-            if (savedCall != null) {
-                savedCall.resolve(new JSObject().put("allowed", isFullScreenAllowed(context)));
-            }
-        }
+    @ActivityCallback
+    private void requestFullScreenCallback(PluginCall call, ActivityResult result) {
+        call.resolve(new JSObject().put("allowed", isFullScreenAllowed(getContext())));
     }
 
     @PluginMethod
