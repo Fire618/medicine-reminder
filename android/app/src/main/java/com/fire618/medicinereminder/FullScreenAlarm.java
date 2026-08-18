@@ -384,7 +384,13 @@ public class FullScreenAlarm extends Plugin {
     @PluginMethod
     public void setAlarmUi(PluginCall call) {
         boolean on = call.getBoolean("on", false);
-        if (getActivity() != null) {
+        if (getActivity() == null) {
+            call.resolve();
+            return;
+        }
+        // Capacitor invokes plugin methods on a background handler thread, but
+        // window/view calls must run on the main thread or the process crashes.
+        getActivity().runOnUiThread(() -> {
             View decor = getActivity().getWindow().getDecorView();
             if (on) {
                 getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -400,7 +406,7 @@ public class FullScreenAlarm extends Plugin {
                 getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
             }
-        }
+        });
         call.resolve();
     }
 
