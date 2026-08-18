@@ -144,7 +144,7 @@ export async function syncNativeNotifications(): Promise<NativeSyncResult> {
       if (!desiredByRid.has(rid)) toCancel.push(rid);
     }
     for (const rid of toCancel) {
-      await FullScreenAlarm.cancel({ reminderId: rid });
+      await cancelNativeNotification(rid);
     }
 
     let scheduled = 0;
@@ -187,12 +187,23 @@ export async function syncNativeNotifications(): Promise<NativeSyncResult> {
   }
 }
 
+/** Keeps the display on and hides the system bars while a forced alarm shows. */
+export async function enableAlarmUi(): Promise<void> {
+  if (!isNativePlatform()) return;
+  try {
+    await FullScreenAlarm.setAlarmUi({ on: true });
+  } catch (err) {
+    console.error('Failed to enable alarm UI', err);
+  }
+}
+
 /** Removes the OS alarm for one reminder (e.g. after the dose is completed). */
 export async function cancelNativeNotification(reminderId: string): Promise<void> {
   if (!isNativePlatform()) return;
   try {
     await FullScreenAlarm.cancel({ reminderId });
     await FullScreenAlarm.stopRingtone();
+    await FullScreenAlarm.setAlarmUi({ on: false });
   } catch (err) {
     console.error('Failed to cancel native alarm', err);
   }

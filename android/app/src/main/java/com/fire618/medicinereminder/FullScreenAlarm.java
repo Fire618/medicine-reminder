@@ -11,7 +11,10 @@ import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.View;
+import android.view.WindowManager;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -52,7 +55,44 @@ public class FullScreenAlarm extends Plugin {
     /** Set when the app is opened by a native alarm; consumed by JS on launch/resume. */
     public static volatile String launchReminderId = null;
 
+    /** Non-null while a forced alarm is ringing; cleared when the dose is confirmed. */
+    public static volatile String activeAlarmId = null;
+
     private static MediaPlayer ringtone = null;
+    private static PowerManager.WakeLock wakeLock = null;
+
+    /** Marks a forced alarm as active and keeps the screen on/lit so the user
+     *  cannot turn it off with the power button until the dose is confirmed. */
+    public static void setActiveAlarm(Context context, String reminderId) {
+        activeAlarmId = reminderId;
+        acquireWakeLock(context);
+    }
+
+    private static void acquireWakeLock(Context context) {
+        try {
+            if (wakeLock != null) return;
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            wakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                    | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                    | PowerManager.ON_AFTER_RELEASE,
+                "medicine-reminder:alarm"
+            );
+            // Renewed on every re-arm, so the alarm keeps the screen on until done.
+            wakeLock.acquire(30 * 60 * 1000L);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void releaseWakeLock() {
+        if (wakeLock != null) {
+            try {
+                wakeLock.release();
+            } catch (Exception ignored) {
+            }
+            wakeLock = null;
+        }
+    }
 
     public static int idFrom(String reminderId) {
         return reminderId.hashCode() & 0x7fffffff;
@@ -206,6 +246,10 @@ public class FullScreenAlarm extends Plugin {
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         nm.cancel(idFrom(reminderId));
         stopRingtone();
+        if (reminderId.equals(activeAlarmId)) {
+            activeAlarmId = null;
+            releaseWakeLock();
+        }
     }
 
     private static boolean isFullScreenAllowed(Context context) {
@@ -322,6 +366,42 @@ public class FullScreenAlarm extends Plugin {
     @ActivityCallback
     private void requestFullScreenCallback(PluginCall call, ActivityResult result) {
         call.resolve(new JSObject().put("allowed", isFullScreenAllowed(getContext())));
+    }
+
+    @PluginMethod
+    public void isAlarmActive(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("active", activeAlarmId != null);
+        if (activeAlarmId != null) ret.put("reminderId", activeAlarmId);
+        call.resolve(ret);
+    }
+
+    /**
+     * While a forced alarm is on screen, keeps the display on and hides the
+     * status/navigation bars (immersive mode) so the user stays on the alarm
+     * until the dose is confirmed. Toggled off by JS when the dose is done.
+     */
+    @PluginMethod
+    public void setAlarmUi(PluginCall call) {
+        boolean on = call.getBoolean("on", false);
+        if (getActivity() != null) {
+            View decor = getActivity().getWindow().getDecorView();
+            if (on) {
+                getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                decor.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                );
+            } else {
+                getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            }
+        }
+        call.resolve();
     }
 
     @PluginMethod

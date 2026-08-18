@@ -32,6 +32,8 @@ export interface FullScreenAlarmPlugin {
   isFullScreenAllowed(): Promise<{ allowed: boolean }>;
   requestFullScreen(): Promise<{ allowed: boolean }>;
   consumeLaunchReminder(): Promise<{ reminderId?: string }>;
+  isAlarmActive(): Promise<{ active: boolean; reminderId?: string }>;
+  setAlarmUi(options: { on: boolean }): Promise<void>;
 }
 
 /** On web this proxy rejects when called, so all callers must guard with isNativePlatform(). */

@@ -8,6 +8,7 @@ import {
   onNativeAppResume,
   requestNativeNotificationPermission,
   syncNativeNotifications,
+  enableAlarmUi,
 } from './notifications';
 
 async function showForcedAlarm(reminderId: string): Promise<void> {
@@ -19,6 +20,7 @@ async function showForcedAlarm(reminderId: string): Promise<void> {
   // Already handling this dose (e.g. user is mid-photo) — don't reset the UI.
   if (getActiveAlarm()?.reminderId === reminderId) return;
   stopAlarmSound();
+  void enableAlarmUi();
   setActiveAlarm({
     reminderId: reminder.id,
     medicineId: medicine.id,

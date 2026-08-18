@@ -50,6 +50,7 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
+        FullScreenAlarm.setActiveAlarm(context, reminderId);
         FullScreenAlarm.startRingtone(context);
         postFullScreen(context, reminderId, title, body);
         reArm(context, reminderId, title, body);

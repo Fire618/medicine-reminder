@@ -8,7 +8,7 @@ import {
   showGentleReminderNotification,
 } from './notifications';
 import { db } from '../db/db';
-import { isNativePlatform } from '../native/notifications';
+import { isNativePlatform, enableAlarmUi } from '../native/notifications';
 
 const TICK_MS = 10_000;
 
@@ -69,6 +69,7 @@ export async function checkDueAlarm(): Promise<void> {
     if (reminder.triggeredAt === null) {
       await db.reminders.update(reminder.id, { triggeredAt: now });
     }
+    void enableAlarmUi();
     setActiveAlarm({
       reminderId: reminder.id,
       medicineId: medicine.id,

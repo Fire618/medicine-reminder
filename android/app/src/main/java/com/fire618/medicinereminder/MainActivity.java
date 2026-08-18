@@ -16,4 +16,12 @@ public class MainActivity extends BridgeActivity {
             setTurnScreenOn(true);
         }
     }
+
+    @Override
+    public void onBackPressed() {
+        // While a forced alarm is ringing the user must take the photo first —
+        // pressing Back is a no-op so the alarm cannot be escaped.
+        if (FullScreenAlarm.activeAlarmId != null) return;
+        super.onBackPressed();
+    }
 }
