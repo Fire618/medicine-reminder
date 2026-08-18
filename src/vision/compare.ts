@@ -14,10 +14,19 @@ export type VisualComparison = {
   breakdown: VisualBreakdown;
   referenceMissing: boolean;
   capturedMissing: boolean;
+  /** True when an image could not be analyzed (pill vs background unclear). */
+  degenerate: boolean;
 };
 
 /** Below this score the images are considered inconsistent. */
-export const MATCH_THRESHOLD = 0.6;
+export const MATCH_THRESHOLD = 0.7;
+
+// Hard minimums per feature: failing any of these means no match, regardless
+// of the weighted score. This stops "similar color on a similar background"
+// from slipping through on the score alone.
+const COLOR_GATE = 0.45;
+const HIST_GATE = 0.3;
+const HASH_GATE = 0.3;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
@@ -82,6 +91,7 @@ export function compareVisualMetadata(
       breakdown: { color: 0, histogram: 0, size: 0, shape: 0, hash: 0 },
       referenceMissing: true,
       capturedMissing: true,
+      degenerate: false,
     };
   }
   if (!reference || !captured) {
@@ -91,6 +101,19 @@ export function compareVisualMetadata(
       breakdown: { color: 0, histogram: 0, size: 0, shape: 0, hash: 0 },
       referenceMissing: !reference,
       capturedMissing: !captured,
+      degenerate: false,
+    };
+  }
+  // If either image could not separate the medicine from the background, we
+  // cannot trust the descriptor — refuse to treat it as a match.
+  if (reference.degenerate || captured.degenerate) {
+    return {
+      score: 0,
+      match: false,
+      breakdown: { color: 0, histogram: 0, size: 0, shape: 0, hash: 0 },
+      referenceMissing: false,
+      capturedMissing: false,
+      degenerate: true,
     };
   }
 
@@ -104,14 +127,16 @@ export function compareVisualMetadata(
   const hash = hashSimilarity(reference.hash, captured.hash);
 
   const score = clamp01(
-    0.3 * color + 0.2 * histogram + 0.15 * size + 0.2 * shape + 0.15 * hash,
+    0.2 * color + 0.3 * histogram + 0.1 * size + 0.2 * shape + 0.2 * hash,
   );
+  const gatesPassed = color >= COLOR_GATE && histogram >= HIST_GATE && hash >= HASH_GATE;
 
   return {
     score,
-    match: score >= MATCH_THRESHOLD,
+    match: gatesPassed && score >= MATCH_THRESHOLD,
     breakdown: { color, histogram, size, shape, hash },
     referenceMissing: false,
     capturedMissing: false,
+    degenerate: false,
   };
 }

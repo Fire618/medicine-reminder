@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import CameraModal from '../camera/CameraModal';
 import { fileToThumbnailBlob } from '../camera/utils';
+import { analyzeImageBlob } from '../vision/analyze';
 
 type ReferenceImagePickerProps = {
   value: Blob | null;
@@ -10,17 +11,34 @@ type ReferenceImagePickerProps = {
 export default function ReferenceImagePicker({ value, onChange }: ReferenceImagePickerProps) {
   const [showCamera, setShowCamera] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [refWarning, setRefWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!value) {
       setPreviewUrl(null);
+      setRefWarning(null);
       return;
     }
     const url = URL.createObjectURL(value);
     setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
+    let cancelled = false;
+    analyzeImageBlob(value)
+      .then((meta) => {
+        if (!cancelled && meta.degenerate) {
+          setRefWarning(
+            'This photo could not be clearly read — the medicine does not stand out from the background. Retake it on a plain, contrasting surface.',
+          );
+        }
+      })
+      .catch(() => {
+        /* leave warning unset on analysis failure */
+      });
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
   }, [value]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,6 +87,7 @@ export default function ReferenceImagePicker({ value, onChange }: ReferenceImage
       />
 
       {error && <p className="form-error" role="alert">{error}</p>}
+      {refWarning && <p className="form-error" role="alert">{refWarning}</p>}
 
       <p className="muted ref-image__note">
         Take the photo of the bare medicine — remove it from any wrapper or

@@ -70,4 +70,30 @@ describe('compareVisualMetadata', () => {
     const result = compareVisualMetadata(a, b);
     expect(result.match).toBe(true);
   });
+
+  it('rejects a different color distribution even with similar color and size', () => {
+    const a = makeMeta();
+    const b = makeMeta({
+      dominantColor: [200, 50, 50],
+      colorHistogram: Array.from({ length: 64 }, (_, i) => (i === 63 ? 1 : 0)),
+      sizeRatio: 0.31,
+      aspectRatio: 1.0,
+      grid: a.grid,
+      hash: a.hash,
+    });
+    const result = compareVisualMetadata(a, b);
+    expect(result.match).toBe(false);
+  });
+
+  it('never matches a degenerate (unanalyzable) image', () => {
+    const a = makeMeta();
+    const b = makeMeta({ degenerate: true });
+    const refDegenerate = compareVisualMetadata({ ...a, degenerate: true }, b);
+    expect(refDegenerate.match).toBe(false);
+    expect(refDegenerate.degenerate).toBe(true);
+
+    const capturedDegenerate = compareVisualMetadata(a, b);
+    expect(capturedDegenerate.match).toBe(false);
+    expect(capturedDegenerate.degenerate).toBe(true);
+  });
 });

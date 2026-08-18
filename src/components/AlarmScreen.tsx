@@ -26,7 +26,9 @@ export default function AlarmScreen() {
   const [flow, setFlow] = useState<Flow>('intro');
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<VisualComparison | null>(null);
-  const [mismatch, setMismatch] = useState<{ blob: Blob; result: VisualComparison } | null>(null);
+  const [mismatch, setMismatch] = useState<
+    { blob: Blob; result: VisualComparison; noReference?: boolean } | null
+  >(null);
 
   useFocusTrap(cardRef, Boolean(alarm) || Boolean(completed));
 
@@ -122,6 +124,14 @@ export default function AlarmScreen() {
     try {
       const capturedMeta = await analyzeImageBlob(blob);
       const result = compareVisualMetadata(medicine?.visualMetadata ?? null, capturedMeta);
+      // A forced alarm must be verified against the stored reference: if no
+      // reference exists the photo cannot prove anything, so the alarm keeps
+      // ringing until a reference is set or the user overrides manually.
+      if (forced && result.referenceMissing) {
+        setMismatch({ blob, result, noReference: true });
+        setFlow('mismatch');
+        return;
+      }
       // A photo that does not match the stored reference does NOT stop the
       // alarm — the user is shown the mismatch and must retake the photo.
       if (!result.referenceMissing && !result.match) {
@@ -268,11 +278,26 @@ export default function AlarmScreen() {
         {flow === 'mismatch' && mismatch && (
           <div className="alarm-mismatch" role="alert">
             <p className="alarm-eyebrow">Medicine mismatch</p>
-            <p>
-              The medicine in this photo does not match{' '}
-              <strong>{alarm.medicineName}</strong>. The alarm keeps ringing
-              until the correct medicine is photographed.
-            </p>
+            {mismatch.noReference ? (
+              <p>
+                No reference photo is set for <strong>{alarm.medicineName}</strong>,
+                so this photo cannot be verified. Add a reference photo in
+                Medicines to enable the visual check — or record this dose
+                manually below.
+              </p>
+            ) : mismatch.result.degenerate ? (
+              <p>
+                The medicine could not be clearly seen in this photo. Photograph
+                it on a plain, contrasting background so its shape, size and
+                color are visible.
+              </p>
+            ) : (
+              <p>
+                The medicine in this photo does not match{' '}
+                <strong>{alarm.medicineName}</strong>. The alarm keeps ringing
+                until the correct medicine is photographed.
+              </p>
+            )}
             <div className="mismatch-photos">
               <figure>
                 {referenceUrl ? (
@@ -291,12 +316,14 @@ export default function AlarmScreen() {
                 <figcaption className="muted">Captured</figcaption>
               </figure>
             </div>
-            <p className="muted" style={{ margin: '0 0 0.75rem' }}>
-              Consistency {mismatch.result.score.toFixed(2)} · color{' '}
-              {mismatch.result.breakdown.color.toFixed(2)} · size{' '}
-              {mismatch.result.breakdown.size.toFixed(2)} · shape{' '}
-              {mismatch.result.breakdown.shape.toFixed(2)}.
-            </p>
+            {!mismatch.noReference && !mismatch.result.degenerate && (
+              <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+                Consistency {mismatch.result.score.toFixed(2)} · color{' '}
+                {mismatch.result.breakdown.color.toFixed(2)} · size{' '}
+                {mismatch.result.breakdown.size.toFixed(2)} · shape{' '}
+                {mismatch.result.breakdown.shape.toFixed(2)}.
+              </p>
+            )}
             <div className="alarm-actions">
               <button type="button" className="btn btn--primary" onClick={() => setFlow('camera')}>
                 Retake photo

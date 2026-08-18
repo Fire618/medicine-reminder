@@ -4,6 +4,8 @@ const WORK_MAX_DIM = 96;
 const GRID = 8;
 const HIST_BUCKETS = 64;
 const FG_DISTANCE_SQ = 60 * 60;
+const MIN_FG_RATIO = 0.02;
+const MAX_FG_RATIO = 0.97;
 
 type Loaded = {
   canvas: HTMLCanvasElement;
@@ -125,13 +127,18 @@ function computeStats(
   return { fgCount, fgR, fgG, fgB, bbox: { x0, y0, x1, y1 }, histogram, grid };
 }
 
-function dHash(ctx: CanvasRenderingContext2D): string {
+function dHash(
+  source: HTMLCanvasElement,
+  box: { x0: number; y0: number; x1: number; y1: number },
+): string {
   const c = document.createElement('canvas');
   c.width = 9;
   c.height = 8;
   const g = c.getContext('2d', { willReadFrequently: true });
   if (!g) return '';
-  g.drawImage(ctx.canvas, 0, 0, 9, 8);
+  const bw = Math.max(1, box.x1 - box.x0 + 1);
+  const bh = Math.max(1, box.y1 - box.y0 + 1);
+  g.drawImage(source, box.x0, box.y0, bw, bh, 0, 0, 9, 8);
   const data = g.getImageData(0, 0, 9, 8).data;
   let bits = 0n;
   for (let y = 0; y < 8; y++) {
@@ -156,7 +163,13 @@ export async function analyzeImageBlob(blob: Blob): Promise<VisualMetadata> {
 
   const total = width * height;
   const fgCount = Math.max(1, stats.fgCount);
-  const sizeRatio = stats.fgCount / total;
+  const fgRatio = stats.fgCount / total;
+  const sizeRatio = fgRatio;
+
+  // If the pill cannot be separated from the background (e.g. white pill on a
+  // white surface, or the frame is one solid color) the descriptor is not
+  // meaningful — flag it so the comparison refuses to treat it as a match.
+  const degenerate = fgRatio < MIN_FG_RATIO || fgRatio > MAX_FG_RATIO;
 
   const bw = Math.max(1, stats.bbox.x1 - stats.bbox.x0 + 1);
   const bh = Math.max(1, stats.bbox.y1 - stats.bbox.y0 + 1);
@@ -171,6 +184,7 @@ export async function analyzeImageBlob(blob: Blob): Promise<VisualMetadata> {
     sizeRatio,
     aspectRatio,
     grid,
-    hash: dHash(ctx),
+    hash: dHash(ctx.canvas, stats.bbox),
+    degenerate,
   };
 }

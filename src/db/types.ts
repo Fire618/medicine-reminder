@@ -20,6 +20,8 @@ export type VisualMetadata = {
   grid: number[];
   /** 64-bit dHash as 16 hex characters. */
   hash: string;
+  /** True when the foreground could not be separated from the background. */
+  degenerate?: boolean;
 };
 
 export type Medicine = {
