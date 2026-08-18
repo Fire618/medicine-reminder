@@ -411,7 +411,7 @@ export default function MedicineForm({ initial, onSubmit, onCancel }: MedicineFo
       </fieldset>
 
       <fieldset className="field">
-        <legend>Reference photo (optional)</legend>
+        <legend>Reference photo (recommended for the visual check)</legend>
         <ReferenceImagePicker
           value={form.referenceImage}
           onChange={(blob) => set('referenceImage', blob)}

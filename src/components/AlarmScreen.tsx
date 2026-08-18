@@ -17,7 +17,7 @@ import { analyzeImageBlob } from '../vision/analyze';
 import { compareVisualMetadata, type VisualComparison } from '../vision/compare';
 import ConfirmationCamera from './ConfirmationCamera';
 
-type Flow = 'intro' | 'camera' | 'checking';
+type Flow = 'intro' | 'camera' | 'checking' | 'mismatch';
 
 export default function AlarmScreen() {
   const alarm = useAlarm();
@@ -26,6 +26,7 @@ export default function AlarmScreen() {
   const [flow, setFlow] = useState<Flow>('intro');
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<VisualComparison | null>(null);
+  const [mismatch, setMismatch] = useState<{ blob: Blob; result: VisualComparison } | null>(null);
 
   useFocusTrap(cardRef, Boolean(alarm) || Boolean(completed));
 
@@ -35,11 +36,35 @@ export default function AlarmScreen() {
   );
   const hasReference = Boolean(medicine?.referenceImage && medicine?.visualMetadata);
 
+  const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mismatch?.blob) {
+      setCapturedUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(mismatch.blob);
+    setCapturedUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [mismatch]);
+
+  useEffect(() => {
+    if (!medicine?.referenceImage) {
+      setReferenceUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(medicine.referenceImage);
+    setReferenceUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [medicine]);
+
   useEffect(() => {
     setConfirming(false);
     setFlow('intro');
     setCaptureError(null);
     setCompleted(null);
+    setMismatch(null);
   }, [alarm?.reminderId]);
 
   useEffect(() => {
@@ -78,6 +103,7 @@ export default function AlarmScreen() {
     setFlow('intro');
     setCaptureError(null);
     setCompleted(null);
+    setMismatch(null);
   };
 
   const resolve = async (action: () => Promise<void>) => {
@@ -92,11 +118,18 @@ export default function AlarmScreen() {
   const handleCapture = async (blob: Blob) => {
     setFlow('checking');
     setCaptureError(null);
+    setMismatch(null);
     try {
       const capturedMeta = await analyzeImageBlob(blob);
       const result = compareVisualMetadata(medicine?.visualMetadata ?? null, capturedMeta);
+      // A photo that does not match the stored reference does NOT stop the
+      // alarm — the user is shown the mismatch and must retake the photo.
+      if (!result.referenceMissing && !result.match) {
+        setMismatch({ blob, result });
+        setFlow('mismatch');
+        return;
+      }
       const verification = result.match ? 'match' : 'no-match';
-      // Record the dose and stop the alarm the moment a photo is captured.
       await markTaken(alarm.reminderId, verification);
       stopAlarmSound();
       setActiveAlarm(null);
@@ -105,6 +138,15 @@ export default function AlarmScreen() {
       console.error('Photo analysis failed', err);
       setCaptureError('The photo could not be analyzed. Please try again.');
       setFlow('camera');
+    }
+  };
+
+  const recordAfterOverride = async () => {
+    stopAlarm();
+    try {
+      await markTaken(alarm.reminderId, 'no-match');
+    } finally {
+      await checkDueAlarm();
     }
   };
 
@@ -126,8 +168,9 @@ export default function AlarmScreen() {
           <>
             {forced ? (
               <div className="alarm-note alarm-note--forced" role="note">
-                This alarm cannot be dismissed. Take a photo of the medicine to
-                record the dose as taken and stop the alarm.
+                This alarm cannot be dismissed. Take a photo of the medicine —
+                it is checked against the stored reference (shape, size, color)
+                and the alarm only stops when it matches.
               </div>
             ) : (
               <>
@@ -222,9 +265,56 @@ export default function AlarmScreen() {
           </div>
         )}
 
+        {flow === 'mismatch' && mismatch && (
+          <div className="alarm-mismatch" role="alert">
+            <p className="alarm-eyebrow">Medicine mismatch</p>
+            <p>
+              The medicine in this photo does not match{' '}
+              <strong>{alarm.medicineName}</strong>. The alarm keeps ringing
+              until the correct medicine is photographed.
+            </p>
+            <div className="mismatch-photos">
+              <figure>
+                {referenceUrl ? (
+                  <img src={referenceUrl} alt={`Reference photo of ${alarm.medicineName}`} />
+                ) : (
+                  <div className="mismatch-photo-empty">No reference photo</div>
+                )}
+                <figcaption className="muted">Expected ({alarm.medicineName})</figcaption>
+              </figure>
+              <figure>
+                {capturedUrl ? (
+                  <img src={capturedUrl} alt="Photo you just captured" />
+                ) : (
+                  <div className="mismatch-photo-empty">No captured photo</div>
+                )}
+                <figcaption className="muted">Captured</figcaption>
+              </figure>
+            </div>
+            <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+              Consistency {mismatch.result.score.toFixed(2)} · color{' '}
+              {mismatch.result.breakdown.color.toFixed(2)} · size{' '}
+              {mismatch.result.breakdown.size.toFixed(2)} · shape{' '}
+              {mismatch.result.breakdown.shape.toFixed(2)}.
+            </p>
+            <div className="alarm-actions">
+              <button type="button" className="btn btn--primary" onClick={() => setFlow('camera')}>
+                Retake photo
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => void recordAfterOverride()}
+              >
+                I&apos;m sure it&apos;s correct — record anyway
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="muted alarm-actions-note">
           {forced
-            ? 'A photo is required. Capturing it records the dose as taken and stops the alarm.'
+            ? 'A photo is required. It is checked against the reference and the alarm stops only when the medicine matches.'
             : 'Capturing a photo records the dose as taken and stops the alarm. Snooze, Skip and Dismiss do not record it as taken.'}
         </p>
       </div>

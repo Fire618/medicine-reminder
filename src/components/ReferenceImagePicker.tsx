@@ -71,8 +71,14 @@ export default function ReferenceImagePicker({ value, onChange }: ReferenceImage
       {error && <p className="form-error" role="alert">{error}</p>}
 
       <p className="muted ref-image__note">
-        Stored only on this device. It is used only for a visual consistency
-        check later — never to identify or authenticate a medicine.
+        Take the photo of the bare medicine — remove it from any wrapper or
+        blister pack and place a single pill/tablet on a plain, contrasting
+        background. Get close so its shape, size and color fill the frame; that
+        is what the reminder check compares against.
+      </p>
+      <p className="muted ref-image__note">
+        Stored only on this device. Used only for a visual consistency check
+        later — never to identify or authenticate a medicine.
       </p>
 
       {showCamera && (
